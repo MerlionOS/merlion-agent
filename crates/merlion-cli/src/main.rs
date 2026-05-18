@@ -4,9 +4,14 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use merlion_config::{Config, Wire};
-use merlion_core::{Agent, AgentEvent, AgentOptions, LlmClient, Message, ToolApprover, ToolRegistry};
+use merlion_core::{
+    Agent, AgentEvent, AgentOptions, Curator, LlmClient, Message, ToolApprover, ToolRegistry,
+};
 use merlion_llm::{AnthropicClient, GeminiClient, OpenAiClient};
+use merlion_memory::MemoryStore;
 use merlion_session::SessionDB;
+use merlion_skills::SkillSet;
+use merlion_tools::skill_tools::SkillToolsConfig;
 use tokio::sync::mpsc;
 use tracing_subscriber::EnvFilter;
 
@@ -166,8 +171,26 @@ async fn chat(cfg: Config, resume: Option<String>) -> Result<()> {
         Wire::Gemini => Arc::new(GeminiClient::new(provider.base_url.clone(), api_key)?),
     };
 
+    let home = merlion_config::merlion_home();
+    let memory_store = Arc::new(MemoryStore::open(home.join("memory"))?);
+    let skills_dir = home.join("skills");
+    std::fs::create_dir_all(&skills_dir).ok();
+    let bundled_skills_dir = std::env::current_dir().ok().map(|p| p.join("skills"));
+    let skill_roots: Vec<std::path::PathBuf> = bundled_skills_dir
+        .into_iter()
+        .filter(|p| p.exists())
+        .chain(std::iter::once(skills_dir.clone()))
+        .collect();
+    let skills = SkillSet::load(&skill_roots).unwrap_or_else(|e| {
+        eprintln!("warning: failed to load skills: {e}");
+        SkillSet::load(&[skills_dir.clone()]).unwrap_or_default()
+    });
+    let skill_cfg = SkillToolsConfig::new(skills_dir.clone());
+
     let mut tools = ToolRegistry::new();
     merlion_tools::register_defaults(&mut tools);
+    merlion_tools::register_memory(&mut tools, memory_store.clone());
+    merlion_tools::register_skill_tools(&mut tools, skill_cfg);
 
     let mut options = AgentOptions::default();
     options.model = provider.model.clone();
@@ -177,6 +200,7 @@ async fn chat(cfg: Config, resume: Option<String>) -> Result<()> {
 
     let approver: Arc<dyn ToolApprover> = Arc::new(approver::ConsoleApprover::new());
     let agent = Agent::new(client, tools, options).with_approver(approver);
+    let mut curator = Curator::default();
 
     let db = SessionDB::open_default()?;
     let session_id = match resume {
@@ -189,18 +213,19 @@ async fn chat(cfg: Config, resume: Option<String>) -> Result<()> {
     };
     let mut messages = db.load_messages(&session_id)?;
     if messages.is_empty() {
-        if let Some(prompt) = cfg.system_prompt.as_deref() {
-            let m = Message::system(prompt);
-            db.append_message(&session_id, &m)?;
-            messages.push(m);
-        } else {
-            let m = Message::system(default_system_prompt());
-            db.append_message(&session_id, &m)?;
-            messages.push(m);
-        }
+        let prompt = build_initial_system_prompt(&cfg, &memory_store, &skills);
+        let m = Message::system(prompt);
+        db.append_message(&session_id, &m)?;
+        messages.push(m);
     }
 
-    println!("merlion — model {} · session {}", provider.model, &session_id[..8]);
+    println!(
+        "merlion — model {} · session {} · {} skills · {} memories",
+        provider.model,
+        &session_id[..8],
+        skills.len(),
+        memory_store.list().map(|v| v.len()).unwrap_or(0),
+    );
     println!("Type your message, blank line to end, /exit to quit, /help for commands.");
 
     let mut rl = rustyline::DefaultEditor::new()?;
@@ -220,10 +245,13 @@ async fn chat(cfg: Config, resume: Option<String>) -> Result<()> {
         match trimmed {
             "/exit" | "/quit" => break,
             "/help" => {
-                println!("/exit  — leave the session");
-                println!("/new   — start a fresh session");
-                println!("/usage — print message count");
-                println!("/model — print active model");
+                println!("/exit         — leave the session");
+                println!("/new          — start a fresh session");
+                println!("/usage        — print message count");
+                println!("/model        — print active model");
+                println!("/skills       — list available skills");
+                println!("/memory       — list memories");
+                println!("/<skill-name> — invoke a skill (prepends its body as a turn)");
                 continue;
             }
             "/usage" => {
@@ -234,12 +262,31 @@ async fn chat(cfg: Config, resume: Option<String>) -> Result<()> {
                 println!("{}", provider.model);
                 continue;
             }
+            "/skills" => {
+                print!("{}", skills.help_index());
+                if !skills.help_index().ends_with('\n') {
+                    println!();
+                }
+                continue;
+            }
+            "/memory" => {
+                match memory_store.list() {
+                    Ok(rows) if rows.is_empty() => println!("(no memories saved)"),
+                    Ok(rows) => {
+                        for r in rows {
+                            println!("{} — {}", r.name, r.hook);
+                        }
+                    }
+                    Err(e) => eprintln!("error: {e}"),
+                }
+                continue;
+            }
             "/new" => {
                 let new_id = uuid::Uuid::new_v4().to_string();
                 db.create_session(&new_id, None)?;
                 println!("new session: {new_id}");
                 messages.clear();
-                let m = Message::system(cfg.system_prompt.as_deref().unwrap_or(default_system_prompt()));
+                let m = Message::system(build_initial_system_prompt(&cfg, &memory_store, &skills));
                 db.append_message(&new_id, &m)?;
                 messages.push(m);
                 continue;
@@ -247,7 +294,36 @@ async fn chat(cfg: Config, resume: Option<String>) -> Result<()> {
             _ => {}
         }
 
-        let user_msg = Message::user(trimmed.to_string());
+        // Slash-command skill invocation: /<skill-name> or /<skill-name> <extra text>.
+        let user_text = if let Some(rest) = trimmed.strip_prefix('/') {
+            let (name, extra) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
+            match skills.get(name) {
+                Some(skill) => {
+                    println!("\x1b[2m(invoking skill `{}`)\x1b[0m", skill.name);
+                    let extra = extra.trim();
+                    if extra.is_empty() {
+                        skill.body.clone()
+                    } else {
+                        format!("{}\n\n---\nUser-supplied arguments: {extra}", skill.body)
+                    }
+                }
+                None => {
+                    eprintln!("unknown slash command: /{name} (try /help)");
+                    continue;
+                }
+            }
+        } else {
+            trimmed.to_string()
+        };
+
+        curator.record_user_turn();
+        let user_text = if let Some(nudge) = curator.nudge_if_due() {
+            format!("<system-reminder>{nudge}</system-reminder>\n\n{user_text}")
+        } else {
+            user_text
+        };
+
+        let user_msg = Message::user(user_text);
         db.append_message(&session_id, &user_msg)?;
         messages.push(user_msg);
 
@@ -315,7 +391,31 @@ fn preview_args(v: &serde_json::Value) -> String {
     }
 }
 
-fn default_system_prompt() -> &'static str {
-    "You are Merlion, a coding agent. You have access to tools: bash, read, write, edit, ls. \
-     Prefer small, verifiable steps. When you finish, stop calling tools and reply in plain text."
+const DEFAULT_SYSTEM_PROMPT: &str =
+    "You are Merlion, a coding agent. You have access to tools: bash, read, write, edit, ls, \
+     grep, glob, web_fetch, memory, skill_create, skill_update. Prefer small, verifiable steps. \
+     Use the `memory` tool to remember durable facts about the user, their project, or their \
+     preferences — these persist across sessions. Create a skill with `skill_create` when you \
+     discover a repeatable workflow worth naming. When you finish, stop calling tools and reply \
+     in plain text.";
+
+fn build_initial_system_prompt(cfg: &Config, memory: &MemoryStore, skills: &SkillSet) -> String {
+    let base = cfg.system_prompt.as_deref().unwrap_or(DEFAULT_SYSTEM_PROMPT);
+    let mut out = String::from(base);
+    let mem_block = memory.render_context_block(2048).unwrap_or_default();
+    if !mem_block.trim().is_empty() {
+        out.push_str("\n\n");
+        out.push_str(&mem_block);
+    }
+    if !skills.is_empty() {
+        out.push_str("\n\n# Available skills\n");
+        out.push_str(
+            "The user can invoke any of these with `/<name>` and you will see the skill body \
+             appended to their next message. You can also reference them when suggesting next \
+             steps.\n",
+        );
+        out.push_str(&skills.help_index());
+    }
+    out
 }
+

@@ -70,21 +70,21 @@ the human stays in control via the approval gate for any shell command.
 
 ---
 
-## Phase 3 — Memory & skills (≈10 session hours)
+## Phase 3 — Memory & skills (≈8 of 10 session hours done)
 
 Hermes's killer feature: agent-curated long-term memory + skill creation.
 
 | # | Deliverable | Files | Est. | Status |
 |---|---|---|---|---|
-| 3.1 | File-backed memory store: `MEMORY.md` (project) + `USER.md` (cross-session) | `crates/merlion-memory/` (new crate) | 1.5h | ⬜️ |
-| 3.2 | `memory` tool: write/read/forget entries with `[[link]]` cross-refs | `merlion-tools/src/memory.rs` | 1h | ⬜️ |
-| 3.3 | Periodic curator nudge: after N turns, prompt the model to extract memories | `merlion-core/src/curator.rs` | 1.5h | ⬜️ |
-| 3.4 | Skill loader: read `~/.merlion/skills/*.md` and bundled `skills/` | `crates/merlion-skills/` (new crate) | 1.5h | ⬜️ |
-| 3.5 | Skill front-matter parser (name, description, model directives) | `merlion-skills/src/parse.rs` | 0.5h | ⬜️ |
-| 3.6 | `/<skill-name>` slash invocation in CLI; tab-complete | `merlion-cli` | 1h | ⬜️ |
-| 3.7 | Skill-creation tool (`create_skill`) — agent writes a new skill file | `merlion-tools/src/skill_tools.rs` | 1h | ⬜️ |
-| 3.8 | Skill self-improvement tool (`update_skill`) | `merlion-tools/src/skill_tools.rs` | 1h | ⬜️ |
-| 3.9 | Compatibility check against [agentskills.io](https://agentskills.io) format | docs + tests | 1h | ⬜️ |
+| 3.1 | File-backed memory store with per-memory `.md` + `MEMORY.md` index | `crates/merlion-memory/` | 1.5h | ✅ |
+| 3.2 | `memory` tool: list / read / write / delete via action arg | `merlion-tools/src/memory.rs` | 1h | ✅ |
+| 3.3 | Periodic curator nudge (every N user turns) | `merlion-core/src/curator.rs` | 1.5h | ✅ |
+| 3.4 | Skill loader (directory + flat layouts, two-root precedence) | `crates/merlion-skills/` | 1.5h | ✅ |
+| 3.5 | Skill front-matter parser | `merlion-skills/src/parse.rs` | 0.5h | ✅ |
+| 3.6 | `/<skill-name>` slash invocation; `/skills` + `/memory` commands | `merlion-cli` | 1h | ✅ |
+| 3.7 | Skill-creation tool (`skill_create`) | `merlion-tools/src/skill_tools.rs` | 1h | ✅ |
+| 3.8 | Skill self-improvement tool (`skill_update`) | `merlion-tools/src/skill_tools.rs` | 1h | ✅ |
+| 3.9 | Tab-complete for `/<skill>` in the REPL; agentskills.io compat doc | `merlion-cli`, docs | 1h | ⬜️ |
 
 **Acceptance:** when the user works on the same project across sessions,
 merlion remembers their preferences and project facts; the agent can write a

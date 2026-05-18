@@ -17,6 +17,8 @@ merlion-llm.workspace = true
 merlion-tools.workspace = true
 merlion-config.workspace = true
 merlion-session.workspace = true
+merlion-memory.workspace = true
+merlion-skills.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 tokio = { workspace = true, features = ["full"] }

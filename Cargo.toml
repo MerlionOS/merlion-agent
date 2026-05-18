@@ -6,6 +6,8 @@ members = [
     "crates/merlion-tools",
     "crates/merlion-config",
     "crates/merlion-session",
+    "crates/merlion-memory",
+    "crates/merlion-skills",
     "crates/merlion-cli",
 ]
 
@@ -44,6 +46,8 @@ merlion-llm = { path = "crates/merlion-llm" }
 merlion-tools = { path = "crates/merlion-tools" }
 merlion-config = { path = "crates/merlion-config" }
 merlion-session = { path = "crates/merlion-session" }
+merlion-memory = { path = "crates/merlion-memory" }
+merlion-skills = { path = "crates/merlion-skills" }
 
 [profile.release]
 lto = "thin"

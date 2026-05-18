@@ -8,7 +8,9 @@ description = "Built-in tools for Merlion Agent (bash, file I/O, edit)"
 
 [dependencies]
 merlion-core.workspace = true
+merlion-memory.workspace = true
 anyhow.workspace = true
+chrono.workspace = true
 thiserror.workspace = true
 serde.workspace = true
 serde_json.workspace = true

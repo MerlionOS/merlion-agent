@@ -20,9 +20,17 @@ What works today:
 - `merlion model <id>` to switch providers
 - `merlion config show` / `config path`
 - `merlion doctor`
-- Tools: `bash`, `read`, `write`, `edit`, `ls`, `grep`, `glob`, `web_fetch`
+- Tools: `bash`, `read`, `write`, `edit`, `ls`, `grep`, `glob`, `web_fetch`,
+  `memory`, `skill_create`, `skill_update`
 - Tool approval gate for sensitive tools (bash / write / edit / web_fetch) —
   prompts y/N/always; bypass with `MERLION_AUTO_APPROVE=1`
+- Persistent memory store under `~/.merlion/memory/` — per-memory `.md`
+  files with YAML front-matter + `MEMORY.md` index, injected into the
+  system prompt at session start
+- Skill system: drop a `<name>.md` into `~/.merlion/skills/` or the
+  bundled `./skills/` dir; invoke with `/<name>` in chat
+- Periodic curator nudge (default every 20 user turns) reminds the model
+  to save durable facts to memory
 - Providers: OpenAI, OpenRouter, Nous Portal, NovitaAI, Moonshot, MiniMax,
   z.ai/GLM, Groq, DeepSeek (all via `POST /chat/completions`), plus
   **Anthropic** (`POST /v1/messages`, native) and **Gemini**
