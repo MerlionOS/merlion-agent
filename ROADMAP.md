@@ -113,17 +113,19 @@ can call them transparently.
 
 ---
 
-## Phase 5 — Messaging gateway (≈7 of 16 session hours done)
+## Phase 5 — Messaging gateway (≈10 of 16 session hours done)
 
 Talk to the agent from your phone. Hermes ships ~20 platforms; we start with
 the three highest-value. Telegram landed first because it's long-poll HTTP
-(no WebSocket / no public webhook endpoint required).
+(no WebSocket / no public webhook endpoint required); Discord followed via
+`serenity`'s Gateway WebSocket client. `merlion gateway start` starts every
+configured platform concurrently.
 
 | # | Deliverable | Files | Est. | Status |
 |---|---|---|---|---|
 | 5.1 | `Gateway` trait + dispatcher in a new `merlion-gateway` crate | `crates/merlion-gateway/` | 2h | ✅ |
 | 5.2 | Telegram adapter (long-polling) | `merlion-gateway/src/telegram.rs` | 3h | ✅ |
-| 5.3 | Discord adapter (slash commands + DM) | `merlion-gateway/src/discord.rs` | 3h | ⬜️ |
+| 5.3 | Discord adapter (DM + @mention, serenity) | `merlion-gateway/src/discord.rs` | 3h | ✅ |
 | 5.4 | Slack adapter (Socket Mode) | `merlion-gateway/src/slack.rs` | 3h | ⬜️ |
 | 5.5 | Env-var per-platform allowlist (Allowlist::from_env) | `merlion-gateway/src/allowlist.rs` | 1.5h | ✅ |
 | 5.6 | Cross-platform session continuity | session join keys | 1.5h | ⬜️ |

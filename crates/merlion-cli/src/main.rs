@@ -65,7 +65,7 @@ enum Command {
         #[command(subcommand)]
         action: McpAction,
     },
-    /// Run the messaging gateway (Telegram).
+    /// Run the messaging gateway (Telegram + Discord).
     Gateway {
         #[command(subcommand)]
         action: GatewayAction,
@@ -371,85 +371,137 @@ async fn connect_server(entry: &ServerEntry) -> Result<McpClient> {
 async fn gateway_cmd(cfg: Config, action: GatewayAction) -> Result<()> {
     match action {
         GatewayAction::Status => {
-            println!("Required env vars:");
-            println!("  TELEGRAM_BOT_TOKEN              — bot token from @BotFather");
-            println!("  MERLION_GATEWAY_ALLOW_TELEGRAM  — comma-separated user ids");
-            println!("                                    (or MERLION_GATEWAY_ALLOW_ALL=1)");
-            let tok = std::env::var("TELEGRAM_BOT_TOKEN").is_ok();
-            let allow = std::env::var("MERLION_GATEWAY_ALLOW_TELEGRAM").is_ok()
-                || std::env::var("MERLION_GATEWAY_ALLOW_ALL").is_ok();
+            let tg_tok = std::env::var("TELEGRAM_BOT_TOKEN").is_ok();
+            let dc_tok = std::env::var("DISCORD_BOT_TOKEN").is_ok();
+            let tg_allow = std::env::var("MERLION_GATEWAY_ALLOW_TELEGRAM").is_ok();
+            let dc_allow = std::env::var("MERLION_GATEWAY_ALLOW_DISCORD").is_ok();
+            let allow_all = std::env::var("MERLION_GATEWAY_ALLOW_ALL").is_ok();
+            println!("Telegram:");
+            println!("  TELEGRAM_BOT_TOKEN               {}", yes_no(tg_tok));
+            println!("  MERLION_GATEWAY_ALLOW_TELEGRAM   {}", yes_no(tg_allow || allow_all));
+            println!("Discord:");
+            println!("  DISCORD_BOT_TOKEN                {}", yes_no(dc_tok));
+            println!("  MERLION_GATEWAY_ALLOW_DISCORD    {}", yes_no(dc_allow || allow_all));
             println!();
-            println!(
-                "TELEGRAM_BOT_TOKEN:               {}",
-                if tok { "set" } else { "MISSING" }
-            );
-            println!(
-                "allowlist (telegram / allow-all): {}",
-                if allow { "set" } else { "MISSING" }
-            );
+            println!("Set `MERLION_GATEWAY_ALLOW_ALL=1` to admit any user (development only).");
             Ok(())
         }
-        GatewayAction::Start => {
-            use merlion_gateway::{Allowlist, Dispatcher, Gateway, TelegramGateway};
-            use std::sync::Arc;
-            use tokio::sync::{mpsc, Mutex};
-
-            let provider = cfg.resolve_provider()?;
-            let api_key = std::env::var(&provider.api_key_env).ok();
-            let llm: Arc<dyn LlmClient> = match provider.wire {
-                Wire::OpenAi => Arc::new(OpenAiClient::new(provider.base_url.clone(), api_key)?),
-                Wire::Anthropic => {
-                    Arc::new(AnthropicClient::new(provider.base_url.clone(), api_key)?)
-                }
-                Wire::Gemini => Arc::new(GeminiClient::new(provider.base_url.clone(), api_key)?),
-            };
-
-            let mut tools = ToolRegistry::new();
-            merlion_tools::register_defaults(&mut tools);
-
-            let mut options = AgentOptions::default();
-            options.model = provider.model.clone();
-            options.temperature = cfg.model.temperature;
-            options.max_tokens = cfg.model.max_tokens;
-            options.max_iterations = cfg.max_iterations;
-            // Gateway runs unattended — bypass approval prompts.
-            let approver: Arc<dyn ToolApprover> =
-                Arc::new(merlion_core::AllowAllApprover);
-            let agent = Arc::new(
-                Agent::new(llm, tools, options).with_approver(approver),
-            );
-
-            let db = Arc::new(Mutex::new(SessionDB::open_default()?));
-            let allowlist = Allowlist::from_env();
-            let system_prompt = cfg
-                .system_prompt
-                .clone()
-                .unwrap_or_else(|| {
-                    "You are Merlion, a coding agent reachable over Telegram. \
-                     Reply succinctly; messaging UIs don't render tool output. \
-                     Use the `memory` tool to remember durable facts."
-                        .into()
-                });
-
-            let dispatcher = Arc::new(Dispatcher::new(agent, db, system_prompt, allowlist));
-            let (incoming_tx, incoming_rx) = mpsc::channel(64);
-            let (outgoing_tx, outgoing_rx) = mpsc::channel(64);
-
-            let dispatcher_task = {
-                let d = dispatcher.clone();
-                tokio::spawn(async move { d.run(incoming_rx, outgoing_tx).await })
-            };
-
-            let telegram = Arc::new(TelegramGateway::from_env()?);
-            println!("gateway started: {}", telegram.name());
-            telegram
-                .run(incoming_tx, outgoing_rx)
-                .await
-                .map_err(|e| anyhow::anyhow!("gateway: {e}"))?;
-            let _ = dispatcher_task.await;
-            Ok(())
-        }
+        GatewayAction::Start => start_gateways(cfg).await,
     }
+}
+
+fn yes_no(b: bool) -> &'static str {
+    if b { "set" } else { "MISSING" }
+}
+
+/// Start every gateway whose env-var config is present. Each gateway gets a
+/// dedicated [`Dispatcher`] instance — they share the underlying [`Agent`]
+/// and `SessionDB` (sessions are keyed on `(platform, user_id)` so they
+/// can't collide), but the message-routing channels are per-platform.
+async fn start_gateways(cfg: Config) -> Result<()> {
+    use merlion_gateway::{Allowlist, DiscordGateway, Gateway, TelegramGateway};
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+
+    let provider = cfg.resolve_provider()?;
+    let api_key = std::env::var(&provider.api_key_env).ok();
+    let llm: Arc<dyn LlmClient> = match provider.wire {
+        Wire::OpenAi => Arc::new(OpenAiClient::new(provider.base_url.clone(), api_key)?),
+        Wire::Anthropic => Arc::new(AnthropicClient::new(provider.base_url.clone(), api_key)?),
+        Wire::Gemini => Arc::new(GeminiClient::new(provider.base_url.clone(), api_key)?),
+    };
+
+    let mut tools = ToolRegistry::new();
+    merlion_tools::register_defaults(&mut tools);
+
+    let mut options = AgentOptions::default();
+    options.model = provider.model.clone();
+    options.temperature = cfg.model.temperature;
+    options.max_tokens = cfg.model.max_tokens;
+    options.max_iterations = cfg.max_iterations;
+    let approver: Arc<dyn ToolApprover> = Arc::new(merlion_core::AllowAllApprover);
+    let agent = Arc::new(Agent::new(llm, tools, options).with_approver(approver));
+
+    let db = Arc::new(Mutex::new(SessionDB::open_default()?));
+    let allowlist = Allowlist::from_env();
+    let system_prompt = cfg.system_prompt.clone().unwrap_or_else(|| {
+        "You are Merlion, a coding agent reachable over messaging platforms. \
+         Reply succinctly; messaging UIs don't render tool output. \
+         Use the `memory` tool to remember durable facts."
+            .into()
+    });
+
+    let mut tasks: Vec<tokio::task::JoinHandle<()>> = Vec::new();
+    let mut started: Vec<&'static str> = Vec::new();
+
+    if std::env::var("TELEGRAM_BOT_TOKEN").is_ok() {
+        let (tx, rx, dispatcher_task) =
+            spawn_dispatcher(&agent, &db, &system_prompt, &allowlist);
+        tasks.push(dispatcher_task);
+        let gw = Arc::new(TelegramGateway::from_env()?);
+        let name = gw.name();
+        started.push(name);
+        tasks.push(tokio::spawn(async move {
+            if let Err(e) = gw.run(tx, rx).await {
+                eprintln!("telegram gateway exited: {e}");
+            }
+        }));
+    }
+    if std::env::var("DISCORD_BOT_TOKEN").is_ok() {
+        let (tx, rx, dispatcher_task) =
+            spawn_dispatcher(&agent, &db, &system_prompt, &allowlist);
+        tasks.push(dispatcher_task);
+        let gw = Arc::new(DiscordGateway::from_env()?);
+        let name = gw.name();
+        started.push(name);
+        tasks.push(tokio::spawn(async move {
+            if let Err(e) = gw.run(tx, rx).await {
+                eprintln!("discord gateway exited: {e}");
+            }
+        }));
+    }
+
+    if started.is_empty() {
+        anyhow::bail!(
+            "no gateway env vars detected. Set TELEGRAM_BOT_TOKEN and/or DISCORD_BOT_TOKEN.\n\
+             See `merlion gateway status`."
+        );
+    }
+    println!("gateway started: {}", started.join(", "));
+
+    // Wait for any task to exit; the rest will get cleaned up on drop.
+    if !tasks.is_empty() {
+        let _ = futures::future::select_all(tasks).await;
+    }
+    Ok(())
+}
+
+fn spawn_dispatcher(
+    agent: &std::sync::Arc<Agent>,
+    db: &std::sync::Arc<tokio::sync::Mutex<SessionDB>>,
+    system_prompt: &str,
+    allowlist: &merlion_gateway::Allowlist,
+) -> (
+    tokio::sync::mpsc::Sender<merlion_gateway::IncomingMessage>,
+    tokio::sync::mpsc::Receiver<merlion_gateway::OutgoingMessage>,
+    tokio::task::JoinHandle<()>,
+) {
+    use std::sync::Arc;
+    use tokio::sync::mpsc;
+    let (incoming_tx, incoming_rx) = mpsc::channel(64);
+    let (outgoing_tx, outgoing_rx) = mpsc::channel(64);
+    let dispatcher = Arc::new(merlion_gateway::Dispatcher::new(
+        agent.clone(),
+        db.clone(),
+        system_prompt.to_string(),
+        allowlist.clone(),
+    ));
+    let task = tokio::spawn(async move {
+        if let Err(e) = dispatcher.run(incoming_rx, outgoing_tx).await {
+            eprintln!("dispatcher exited: {e}");
+        }
+    });
+    (incoming_tx, outgoing_rx, task)
 }
 
 async fn cron_cmd(cfg: Config, action: CronAction) -> Result<()> {

@@ -8,11 +8,13 @@
 //! agent, and emits [`OutgoingMessage`]s.
 
 pub mod allowlist;
+pub mod discord;
 pub mod dispatcher;
 pub mod telegram;
 pub mod types;
 
 pub use allowlist::Allowlist;
+pub use discord::DiscordGateway;
 pub use dispatcher::Dispatcher;
 pub use telegram::TelegramGateway;
 pub use types::{Gateway, IncomingMessage, OutgoingMessage, User};
