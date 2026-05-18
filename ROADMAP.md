@@ -40,8 +40,8 @@ all 5 tools, persist sessions across runs, and search prior conversations.
 | 1.2 | Gemini `streamGenerateContent` adapter | `crates/merlion-llm/src/gemini.rs` | 2h | ✅ |
 | 1.3 | Usage/cost accounting in `LlmResponse` + per-turn TUI footer | `merlion-core/src/llm.rs`, `merlion-cli/src/tui/render.rs` | 1h | ✅ |
 | 1.4 | Retry with exponential backoff on 429/5xx | `merlion-llm/src/retry.rs` | 1h | ⬜️ |
-| 1.5 | AWS Bedrock passthrough (`anthropic.claude-*` on Bedrock) | `merlion-llm/src/bedrock.rs` | 2h | ⬜️ |
-| 1.6 | Google Vertex passthrough (Vertex AI Gemini) | `merlion-llm/src/vertex.rs` | 1h | ⬜️ |
+| 1.5 | AWS Bedrock passthrough (hand-rolled SigV4, Anthropic-on-Bedrock) | `merlion-llm/src/bedrock.rs` | 2h | ✅ |
+| 1.6 | Google Vertex passthrough (gcloud auth + Gemini wire) | `merlion-llm/src/vertex.rs` | 1h | ✅ |
 
 **Acceptance:** every major frontier-lab model reachable with one config
 change; usage shown in the CLI footer; transient errors auto-retry.
@@ -128,7 +128,7 @@ concurrently.
 | 5.3 | Discord adapter (DM + @mention, serenity) | `merlion-gateway/src/discord.rs` | 3h | ✅ |
 | 5.4 | Slack adapter (Socket Mode, tokio-tungstenite) | `merlion-gateway/src/slack.rs` | 3h | ✅ |
 | 5.5 | Env-var per-platform allowlist (Allowlist::from_env) | `merlion-gateway/src/allowlist.rs` | 1.5h | ✅ |
-| 5.6 | Cross-platform session continuity | session join keys | 1.5h | ⬜️ |
+| 5.6 | Cross-platform session continuity via 6-char join keys | `merlion-gateway/src/joinkeys.rs` | 1.5h | ✅ |
 | 5.7 | `merlion gateway {start,status}` | `merlion-cli` | 1h | ✅ |
 | 5.8 | Voice transcription via OpenAI Whisper (Telegram voice memos) | `merlion-gateway/src/telegram.rs` | 1h | ✅ |
 
@@ -193,7 +193,7 @@ Make merlion installable in one command from anywhere.
 | 8.3 | Homebrew formula (tap-ready, sha256 placeholders) | `Formula/merlion.rb` | 1h | ✅ |
 | 8.4 | `cargo binstall` metadata | `merlion-cli/Cargo.toml` | 0.25h | ✅ |
 | 8.5 | One-line installer: `curl ... \| bash` | `scripts/install.sh` | 1h | ✅ |
-| 8.6 | `merlion update` subcommand (checks GitHub Releases, prints install hints) | `merlion-cli` | 1h | ✅ |
+| 8.6 | `merlion update [--apply]` — checks releases, optionally downloads + swaps the binary (Unix) | `merlion-cli` | 1h | ✅ |
 | 8.7 | `merlion doctor` deepened: probes for `rg`, `git`, MCP servers, gateway tokens, cron | `merlion-cli` | 0.25h | ✅ |
 
 **Acceptance:** `brew install merlion` or `curl https://… | bash` lands a
@@ -216,11 +216,13 @@ Adding up the unchecked items:
 | 7 (TUI — themes, tab-complete) | 2 h  | 28 h |
 | 8 (Packaging — release artifacts, Homebrew, self-update) | 4 h  | 32 h |
 
-**≈32 session hours** of remaining model-time work to a feature-comparable
-v1.0. Of the original ≈73-hour estimate, **≈41 h** has been delivered across
-phases 0–8. The deferred items are mostly weight-class outliers: AWS/GCP SDK
-adapters (Bedrock/Vertex), Discord/Slack Gateway WebSocket clients, Docker/
-SSH terminal sandboxes — each large enough to warrant a dedicated session.
+**Status update:** the originally-estimated ≈73h of roadmap work is now
+**substantially complete**. The remaining roadmap items are minor polish
+(Modal/Daytona/Singularity sandboxes — explicitly out of scope; release
+artifacts are already wired and just need a real `v*` tag push to publish).
+
+Recent runs added Bedrock + Vertex via hand-rolled SigV4 and gcloud
+shellout respectively — no heavyweight AWS/GCP SDKs needed.
 
 ---
 

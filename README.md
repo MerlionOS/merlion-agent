@@ -48,8 +48,10 @@ What works today:
 - One-line installer: `curl -fsSL .../install.sh | bash`
 - Providers: OpenAI, OpenRouter, Nous Portal, NovitaAI, Moonshot, MiniMax,
   z.ai/GLM, Groq, DeepSeek (all via `POST /chat/completions`), plus
-  **Anthropic** (`POST /v1/messages`, native) and **Gemini**
-  (`POST /models/<m>:streamGenerateContent`, native).
+  **Anthropic** (`POST /v1/messages`, native), **Gemini**
+  (`POST /models/<m>:streamGenerateContent`, native), **AWS Bedrock**
+  (hand-rolled SigV4, Anthropic-on-Bedrock), and **Google Vertex AI**
+  (gcloud OAuth bearer + Gemini wire).
 - Persistent sessions in `~/.merlion/sessions.db` with FTS5 full-text search.
 
 What's coming (see [ROADMAP.md](ROADMAP.md)):
