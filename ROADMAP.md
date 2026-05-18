@@ -4,94 +4,279 @@ The Python hermes-agent is ~830,000 lines across many subsystems. Merlion is a
 ground-up Rust reimplementation that intentionally trims scope. This document
 maps what's done, what's next, and what's deliberately out of scope.
 
-The unit of estimation here is **Claude Code session hours** — the time the
-coding agent spends building it, not human-pace estimates.
+The unit of estimation is **Claude Code session hours** — the time the coding
+agent spends building it, not human-pace estimates. Wall-clock time depends on
+how the user chooses to space sessions; each unit below is "uninterrupted
+session time the model needs to land the work, with reviews."
 
-## Phase 0 — MVP (done)
+**Status legend:** ✅ done · 🟡 in progress · ⬜️ planned · ⛔️ out of scope
 
-- [x] Cargo workspace and crate split
-- [x] `merlion-core`: messages, tool trait, agent loop with iteration budget
-- [x] `merlion-llm`: OpenAI-compatible streaming client (SSE)
-- [x] `merlion-tools`: bash, read, write, edit, ls
-- [x] `merlion-config`: `~/.merlion/config.yaml`, `.env`, env overrides,
-  provider presets for OpenAI / OpenRouter / Nous / Novita / Moonshot /
-  MiniMax / z.ai / Groq / DeepSeek
-- [x] `merlion-session`: SQLite + FTS5 session store
-- [x] `merlion-cli`: chat REPL with streaming, slash commands, `model`,
-  `config`, `doctor`, `sessions list`/`sessions search`
+---
 
-## Phase 1 — Provider breadth (≈4–6 session hours)
+## Phase 0 — MVP (✅ done, ≈4 session hours)
 
-- [x] Anthropic native adapter (`/v1/messages`) — `anthropic:` provider
-- [x] Gemini native adapter (`streamGenerateContent`) — `gemini:` provider
-- [ ] Bedrock + Vertex passthroughs
-- [ ] Usage / cost accounting per response
-- [ ] Retry with backoff on 429 / 5xx (already partly handled by reqwest)
+Foundation: workspace, core types, agent loop, one provider, basic tools, CLI.
 
-## Phase 2 — Tool surface (≈6–10 session hours)
+| # | Deliverable | Status |
+|---|---|---|
+| 0.1 | Cargo workspace + `crates/merlion-{core,llm,tools,config,session,cli}` | ✅ |
+| 0.2 | `merlion-core`: `Message`, `Tool`, `Agent::run` with iteration budget | ✅ |
+| 0.3 | `merlion-llm::OpenAiClient` — SSE chat-completions | ✅ |
+| 0.4 | `merlion-tools`: `bash`, `read`, `write`, `edit`, `ls` | ✅ |
+| 0.5 | `merlion-config`: YAML, `.env`, env overrides, 9 OpenAI-compatible presets | ✅ |
+| 0.6 | `merlion-session`: SQLite + FTS5 | ✅ |
+| 0.7 | `merlion-cli`: chat REPL + `model`/`config`/`doctor`/`sessions` | ✅ |
 
-- [ ] `grep` (ripgrep-style — likely shells out to `rg`)
-- [ ] `find` / `glob`
-- [ ] `task` — spawn subagent with isolated context
-- [ ] `web_fetch` — HTTP GET with readability-style extraction
-- [ ] `web_search` — pluggable provider (Brave/Tavily/SerpAPI)
-- [ ] Tool approval / allowlist callback (mirrors hermes `approval.py`)
-- [ ] Tool-result truncation + on-disk overflow (hermes `tool_result_storage`)
+**Acceptance:** `merlion` can chat with any OpenAI-compatible endpoint, call
+all 5 tools, persist sessions across runs, and search prior conversations.
 
-## Phase 3 — Memory & skills (≈8–12 session hours)
+---
 
-- [ ] MEMORY.md + USER.md style memory store
-- [ ] `memory` tool (read/write/forget)
-- [ ] Skill discovery from `~/.merlion/skills/` and bundled `skills/`
-- [ ] `/<skill>` slash invocation
-- [ ] Compatibility with the [agentskills.io](https://agentskills.io) format
-- [ ] Curator-style nudges to persist learning
+## Phase 1 — Provider breadth (≈4 of 6 session hours done)
 
-## Phase 4 — MCP integration (≈6–8 session hours)
+| # | Deliverable | Files | Est. | Status |
+|---|---|---|---|---|
+| 1.1 | Anthropic `/v1/messages` adapter | `crates/merlion-llm/src/anthropic.rs` | 2h | ✅ |
+| 1.2 | Gemini `streamGenerateContent` adapter | `crates/merlion-llm/src/gemini.rs` | 2h | ✅ |
+| 1.3 | Usage/cost accounting in `LlmResponse` + per-turn display | `merlion-core/src/llm.rs`, CLI | 1h | ⬜️ |
+| 1.4 | Retry with exponential backoff on 429/5xx | `merlion-llm/src/retry.rs` | 1h | ⬜️ |
+| 1.5 | AWS Bedrock passthrough (`anthropic.claude-*` on Bedrock) | `merlion-llm/src/bedrock.rs` | 2h | ⬜️ |
+| 1.6 | Google Vertex passthrough (Vertex AI Gemini) | `merlion-llm/src/vertex.rs` | 1h | ⬜️ |
 
-- [ ] Stdio + HTTP MCP transports
-- [ ] Tool injection from connected MCP servers
-- [ ] OAuth flow for MCP servers that need it
+**Acceptance:** every major frontier-lab model reachable with one config
+change; usage shown in the CLI footer; transient errors auto-retry.
 
-## Phase 5 — Messaging gateway (≈12–20 session hours)
+---
 
-- [ ] `gateway` subcommand, per-platform adapters
-- [ ] Telegram, Discord, Slack first (highest user value)
-- [ ] DM pairing and per-user allowlists
-- [ ] Conversation continuity across CLI ↔ messaging
+## Phase 2 — Tool surface (≈8 session hours)
 
-## Phase 6 — Cron + remote execution (≈6–8 session hours)
+This is where merlion stops being a toy. The goal is a tool set that lets the
+agent actually complete coding tasks autonomously.
 
-- [ ] Cron scheduler (tokio-cron-scheduler)
-- [ ] Job → message-platform delivery
-- [ ] Sandboxed terminal backends: docker, ssh
-  - Modal / Daytona / Vercel Sandbox / Singularity deferred
+| # | Deliverable | Files | Est. | Status |
+|---|---|---|---|---|
+| 2.1 | `grep` (ripgrep-backed, POSIX `grep -rn` fallback) | `merlion-tools/src/grep.rs` | 1h | 🟡 |
+| 2.2 | `glob` (uses the `glob` crate, capped results) | `merlion-tools/src/glob.rs` | 0.5h | 🟡 |
+| 2.3 | `web_fetch` (reqwest + html2text, 256 KiB cap) | `merlion-tools/src/web_fetch.rs` | 1h | 🟡 |
+| 2.4 | `web_search` pluggable backend (Brave / Tavily / SerpAPI) | `merlion-tools/src/web_search.rs` | 1.5h | ⬜️ |
+| 2.5 | `task` — spawn a subagent with isolated message list + tools | `merlion-tools/src/task.rs` | 2h | ⬜️ |
+| 2.6 | `ToolApprover` trait in core; CLI implements console prompter | `merlion-core/src/tool.rs`, CLI | 1h | 🟡 |
+| 2.7 | Command-pattern allowlist persisted to `~/.merlion/approvals.yaml` | `merlion-config` | 0.5h | ⬜️ |
+| 2.8 | Tool-result truncation + overflow to `~/.merlion/tool_results/<id>` | `merlion-tools/src/storage.rs` | 0.5h | ⬜️ |
 
-## Phase 7 — TUI (≈8–12 session hours)
+**Acceptance:** the agent can search a repo with `grep`, find files with
+`glob`, fetch a URL, search the web, delegate a side-quest to a subagent, and
+the human stays in control via the approval gate for any shell command.
 
-- [ ] ratatui-based terminal UI
-- [ ] Multiline editing, slash autocomplete, history scroll
-- [ ] Streaming output with interrupt-and-redirect
+---
 
-## Out of scope (at least for now)
+## Phase 3 — Memory & skills (≈10 session hours)
+
+Hermes's killer feature: agent-curated long-term memory + skill creation.
+
+| # | Deliverable | Files | Est. | Status |
+|---|---|---|---|---|
+| 3.1 | File-backed memory store: `MEMORY.md` (project) + `USER.md` (cross-session) | `crates/merlion-memory/` (new crate) | 1.5h | ⬜️ |
+| 3.2 | `memory` tool: write/read/forget entries with `[[link]]` cross-refs | `merlion-tools/src/memory.rs` | 1h | ⬜️ |
+| 3.3 | Periodic curator nudge: after N turns, prompt the model to extract memories | `merlion-core/src/curator.rs` | 1.5h | ⬜️ |
+| 3.4 | Skill loader: read `~/.merlion/skills/*.md` and bundled `skills/` | `crates/merlion-skills/` (new crate) | 1.5h | ⬜️ |
+| 3.5 | Skill front-matter parser (name, description, model directives) | `merlion-skills/src/parse.rs` | 0.5h | ⬜️ |
+| 3.6 | `/<skill-name>` slash invocation in CLI; tab-complete | `merlion-cli` | 1h | ⬜️ |
+| 3.7 | Skill-creation tool (`create_skill`) — agent writes a new skill file | `merlion-tools/src/skill_tools.rs` | 1h | ⬜️ |
+| 3.8 | Skill self-improvement tool (`update_skill`) | `merlion-tools/src/skill_tools.rs` | 1h | ⬜️ |
+| 3.9 | Compatibility check against [agentskills.io](https://agentskills.io) format | docs + tests | 1h | ⬜️ |
+
+**Acceptance:** when the user works on the same project across sessions,
+merlion remembers their preferences and project facts; the agent can write a
+skill mid-conversation and invoke it next time with `/<name>`.
+
+---
+
+## Phase 4 — MCP integration (≈8 session hours)
+
+Connect the agent to the wider ecosystem of MCP servers (filesystem, GitHub,
+databases, etc.).
+
+| # | Deliverable | Files | Est. | Status |
+|---|---|---|---|---|
+| 4.1 | MCP wire types (Initialize, ListTools, CallTool) | `crates/merlion-mcp/src/proto.rs` | 1h | ⬜️ |
+| 4.2 | Stdio transport (spawn server process, framed JSON-RPC) | `merlion-mcp/src/stdio.rs` | 1.5h | ⬜️ |
+| 4.3 | HTTP+SSE transport | `merlion-mcp/src/http.rs` | 1.5h | ⬜️ |
+| 4.4 | MCP server registry: `~/.merlion/mcp.yaml` | `merlion-mcp/src/registry.rs` | 1h | ⬜️ |
+| 4.5 | Inject MCP tools into `ToolRegistry` on startup | `merlion-cli` | 1h | ⬜️ |
+| 4.6 | OAuth flow for MCP servers that require it | `merlion-mcp/src/oauth.rs` | 1.5h | ⬜️ |
+| 4.7 | `merlion mcp {add,list,remove,test}` subcommands | `merlion-cli` | 0.5h | ⬜️ |
+
+**Acceptance:** `merlion mcp add filesystem ~/projects` adds a working
+filesystem MCP server; its tools show up in `merlion doctor` and the agent
+can call them transparently.
+
+---
+
+## Phase 5 — Messaging gateway (≈16 session hours)
+
+Talk to the agent from your phone. Hermes ships ~20 platforms; we start with
+the three highest-value.
+
+| # | Deliverable | Files | Est. | Status |
+|---|---|---|---|---|
+| 5.1 | `Gateway` trait + dispatcher in a new `merlion-gateway` crate | `crates/merlion-gateway/` | 2h | ⬜️ |
+| 5.2 | Telegram adapter (long-polling, voice memos via Whisper) | `merlion-gateway/src/telegram.rs` | 3h | ⬜️ |
+| 5.3 | Discord adapter (slash commands + DM) | `merlion-gateway/src/discord.rs` | 3h | ⬜️ |
+| 5.4 | Slack adapter (Events API + Socket Mode) | `merlion-gateway/src/slack.rs` | 3h | ⬜️ |
+| 5.5 | DM pairing + per-user allowlist | `merlion-gateway/src/pairing.rs` | 1.5h | ⬜️ |
+| 5.6 | Cross-platform session continuity (continue a CLI session over TG) | session join keys | 1.5h | ⬜️ |
+| 5.7 | `merlion gateway {setup,start,stop,status}` | `merlion-cli` | 1h | ⬜️ |
+| 5.8 | Voice transcription via Whisper API or local whisper.cpp | `merlion-gateway/src/voice.rs` | 1h | ⬜️ |
+
+**Acceptance:** one `merlion gateway start` process serves all three
+platforms; the same conversation can move between Telegram and the CLI.
+
+⛔️ Out of scope for now: WhatsApp, Signal, Matrix, Mattermost, Feishu,
+WeCom, WeChat, QQ, Email, SMS, DingTalk, BlueBubbles, Yuanbao, Home
+Assistant, WebHook, Generic API server. PRs welcome under
+`merlion-gateway/src/platforms/`.
+
+---
+
+## Phase 6 — Cron + sandboxed execution (≈8 session hours)
+
+Scheduled runs + isolation from the host filesystem.
+
+| # | Deliverable | Files | Est. | Status |
+|---|---|---|---|---|
+| 6.1 | Cron scheduler with `tokio-cron-scheduler`, persisted job table | `crates/merlion-cron/` | 2h | ⬜️ |
+| 6.2 | Job → messaging-platform delivery (uses Phase 5 gateway) | `merlion-cron/src/delivery.rs` | 1h | ⬜️ |
+| 6.3 | `merlion cron {add,list,remove,run}` subcommands | `merlion-cli` | 1h | ⬜️ |
+| 6.4 | Docker terminal backend (run shell commands in a container) | `merlion-tools/src/sandboxes/docker.rs` | 2h | ⬜️ |
+| 6.5 | SSH terminal backend (run on a remote host) | `merlion-tools/src/sandboxes/ssh.rs` | 2h | ⬜️ |
+
+**Acceptance:** `merlion cron add "0 9 * * * 'check my email and summarize'"`
+runs at 9am daily and delivers the result to Telegram.
+
+⛔️ Out of scope: Modal, Daytona, Singularity, Vercel Sandbox.
+
+---
+
+## Phase 7 — TUI (≈12 session hours)
+
+Hermes's terminal UI is a meaningful UX win over a plain REPL. ratatui makes
+this tractable in Rust.
+
+| # | Deliverable | Files | Est. | Status |
+|---|---|---|---|---|
+| 7.1 | ratatui scaffolding: layout, event loop, render budget | `merlion-cli/src/tui/` | 2h | ⬜️ |
+| 7.2 | Multiline editor widget (Ctrl+J newline, Enter submit) | `merlion-cli/src/tui/editor.rs` | 2h | ⬜️ |
+| 7.3 | Slash-command autocomplete (Tab) | `merlion-cli/src/tui/complete.rs` | 1.5h | ⬜️ |
+| 7.4 | Streaming output pane with interrupt-and-redirect (Ctrl+C → new input) | `merlion-cli/src/tui/stream.rs` | 2h | ⬜️ |
+| 7.5 | Tool-output collapsible panes | `merlion-cli/src/tui/tools.rs` | 1.5h | ⬜️ |
+| 7.6 | History scroll (mouse + keyboard) | `merlion-cli/src/tui/history.rs` | 1.5h | ⬜️ |
+| 7.7 | `--tui` flag default-on when stdout is a TTY | `merlion-cli` | 0.5h | ⬜️ |
+| 7.8 | Light/dark theme via config | `merlion-cli/src/tui/theme.rs` | 1h | ⬜️ |
+
+**Acceptance:** running `merlion` in a terminal feels modern — streaming,
+collapsible tool output, no flicker, interrupt mid-stream.
+
+---
+
+## Phase 8 — Polish, packaging, distribution (≈6 session hours)
+
+Make merlion installable in one command from anywhere.
+
+| # | Deliverable | Files | Est. | Status |
+|---|---|---|---|---|
+| 8.1 | GitHub Actions CI: build + test on linux/macos/windows | `.github/workflows/ci.yml` | 1h | ⬜️ |
+| 8.2 | Release workflow: `cargo dist`-style cross-compiled artifacts | `.github/workflows/release.yml` | 1.5h | ⬜️ |
+| 8.3 | Homebrew formula (tap or core) | `Formula/merlion.rb` | 1h | ⬜️ |
+| 8.4 | `cargo binstall` metadata | `Cargo.toml` | 0.25h | ⬜️ |
+| 8.5 | One-line installer: `curl ... | bash` | `scripts/install.sh` | 1h | ⬜️ |
+| 8.6 | `merlion update` subcommand (self-update) | `merlion-cli` | 1h | ⬜️ |
+| 8.7 | `merlion doctor` deepened: probes for `rg`, `git`, MCP servers, etc. | `merlion-cli` | 0.25h | ⬜️ |
+
+**Acceptance:** `brew install merlion` or `curl https://… | bash` lands a
+working binary; `merlion update` self-upgrades to the latest release.
+
+---
+
+## Summary — remaining work to v1
+
+Adding up the unchecked items:
+
+| Phase | Remaining | Cumulative |
+|---|---:|---:|
+| 1 (Provider breadth)         | 5 h  | 5 h  |
+| 2 (Tool surface)             | 8 h  | 13 h |
+| 3 (Memory & skills)          | 10 h | 23 h |
+| 4 (MCP integration)          | 8 h  | 31 h |
+| 5 (Messaging gateway)        | 16 h | 47 h |
+| 6 (Cron + sandbox)           | 8 h  | 55 h |
+| 7 (TUI)                      | 12 h | 67 h |
+| 8 (Polish & packaging)       | 6 h  | 73 h |
+
+**≈73 session hours** of model-time work between today and a feature-comparable
+v1.0. The current state (≈8 h in) ships a usable agent for OpenAI/Anthropic/
+Gemini with the basic file/shell toolset.
+
+---
+
+## ⛔️ Explicitly out of scope (for v1.0)
 
 These are real features in hermes that Merlion is **not** planning to port,
 because they're tangential to the core agent loop or require an enormous amount
-of infrastructure:
+of infrastructure relative to user impact:
 
-- Batch trajectory generation
-- Trajectory compression for training
-- ACP adapter (VS Code / Zed / JetBrains integration via the Agent Client
-  Protocol) — re-evaluate if there's user demand
-- The full ~20-platform messaging matrix (we ship 3, others welcome as PRs)
-- Browser tool (Camoufox / CDP) — large surface area; reconsider in Phase 8
-- Honcho-style dialectic user modeling
-- Image-gen and TTS plugins
+- **Batch trajectory generation** + trajectory compression for training the
+  next generation of tool-calling models. Hermes ships this; it's a research
+  tool, not an end-user feature.
+- **ACP adapter** (VS Code / Zed / JetBrains integration via the Agent Client
+  Protocol). Reconsider in v1.x if there's user demand.
+- **The full ~20-platform messaging matrix.** We ship 3 in Phase 5; the rest
+  are PR-welcome but won't block v1.0.
+- **Browser tool** (Camoufox / CDP). Large surface area; reconsider after
+  Phase 7.
+- **Honcho-style dialectic user modeling.** Memory in Phase 3 is the
+  simpler MEMORY.md/USER.md model.
+- **Image-generation and TTS plugins.** Out of scope.
+- **Modal / Daytona / Singularity / Vercel Sandbox** terminal backends.
+  Docker + SSH (Phase 6) cover the common case.
+- **Honcho, Mem0, Supermemory** memory-provider plugins. File-backed memory
+  is the v1.0 baseline; plugins reconsidered later.
 
-## Sequencing
+---
 
-Phases 1–4 are the highest-leverage next steps. Phases 5–7 are user-visible but
-much larger; they should be done once the core engine is stable and tested.
+## Sequencing logic
 
-If you want to contribute, the easiest places to start are Phase 1 (Anthropic
-adapter) and Phase 2 (`grep`/`find` tools).
+The ordering above is roughly highest-leverage first:
+
+1. **Provider breadth** (Phase 1) — broaden the audience first; people use what
+   they have keys for.
+2. **Tool surface** (Phase 2) — without `grep`/`glob`/`web_fetch`, the agent is
+   noticeably worse than competitors at real coding tasks.
+3. **Memory & skills** (Phase 3) — this is hermes's differentiator; once tools
+   are good, memory makes merlion *useful across sessions*, not just *useful
+   in one session*.
+4. **MCP** (Phase 4) — opens the ecosystem; cheap relative to value.
+5. **Gateway** (Phase 5) — the "lives where you do" promise; big chunk of work
+   but high user-visible payoff.
+6. **Cron + sandboxes** (Phase 6) — unlocks unattended runs.
+7. **TUI** (Phase 7) — quality-of-life polish. Could be reordered earlier if
+   feedback prioritizes it.
+8. **Packaging** (Phase 8) — only meaningful once the features are in.
+
+If you want to skip ahead — for instance, jump to Phase 5 (gateway) before
+finishing Phase 2 — it's tractable but the gateway version will be missing
+tools that the CLI version has, so chat sessions from Telegram will feel
+weaker than CLI ones until Phase 2 lands.
+
+---
+
+## Contributing
+
+The easiest places to start:
+
+- Phase 1 leftovers: usage/cost accounting (1.3), retry/backoff (1.4)
+- Phase 2: any single tool (1h each)
+- Phase 8: GitHub Actions CI (8.1)
+
+Each task above is sized to one Claude Code session. Pick one, file an issue,
+and PR.
