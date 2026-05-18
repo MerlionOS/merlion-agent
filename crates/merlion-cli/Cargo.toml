@@ -46,6 +46,7 @@ reqwest = { workspace = true, features = ["json"] }
 dirs.workspace = true
 ratatui = "0.28"
 crossterm = { version = "0.28", features = ["event-stream"] }
+tempfile = "3"
 
 [dev-dependencies]
 tempfile = "3"

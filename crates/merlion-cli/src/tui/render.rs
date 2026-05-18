@@ -1,10 +1,11 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 use ratatui::Frame;
 
 use super::app::{App, RenderedTurn};
+use super::theme::Theme;
 
 pub fn draw(f: &mut Frame, app: &App) {
     let input_height = input_height(&app.input).clamp(1, 8);
@@ -30,7 +31,7 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
             "merlion · {} · session {} · {} skills · {} memories",
             app.model, app.session_id_short, app.skill_count, app.memory_count
         ),
-        Style::default().add_modifier(Modifier::DIM),
+        app.theme.header,
     )]);
     f.render_widget(Paragraph::new(line), area);
 }
@@ -39,11 +40,11 @@ fn draw_status(f: &mut Frame, area: Rect, app: &App) {
     let style = if app.status.starts_with("running tool")
         || app.status.starts_with("thinking")
     {
-        Style::default().fg(Color::Yellow)
+        app.theme.status_busy
     } else if app.status.contains("exhausted") || app.status.contains("error") {
-        Style::default().fg(Color::Red)
+        app.theme.tool_err
     } else {
-        Style::default().add_modifier(Modifier::DIM)
+        app.theme.status_idle
     };
     let dim = Style::default().add_modifier(Modifier::DIM);
     let mut spans = vec![Span::styled(format!("· {}", app.status), style)];
@@ -61,7 +62,7 @@ fn draw_status(f: &mut Frame, area: Rect, app: &App) {
 }
 
 fn draw_conversation(f: &mut Frame, area: Rect, app: &App) {
-    let lines = render_turns(&app.messages);
+    let lines = render_turns(&app.messages, &app.theme);
     let total = lines.len() as u16;
     // Convert lines to Text for the Paragraph widget.
     let text = Text::from(lines);
@@ -78,7 +79,7 @@ fn draw_conversation(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(para, area);
 }
 
-fn render_turns(turns: &[RenderedTurn]) -> Vec<Line<'static>> {
+fn render_turns(turns: &[RenderedTurn], theme: &Theme) -> Vec<Line<'static>> {
     let mut out: Vec<Line<'static>> = Vec::new();
     for turn in turns {
         match turn {
@@ -86,12 +87,7 @@ fn render_turns(turns: &[RenderedTurn]) -> Vec<Line<'static>> {
                 let mut iter = text.lines();
                 if let Some(first) = iter.next() {
                     out.push(Line::from(vec![
-                        Span::styled(
-                            "you › ",
-                            Style::default()
-                                .fg(Color::Cyan)
-                                .add_modifier(Modifier::BOLD),
-                        ),
+                        Span::styled("you › ", theme.user_text),
                         Span::raw(first.to_string()),
                     ]));
                 }
@@ -107,17 +103,15 @@ fn render_turns(turns: &[RenderedTurn]) -> Vec<Line<'static>> {
                 let mut iter = text.lines();
                 if let Some(first) = iter.next() {
                     out.push(Line::from(vec![
-                        Span::styled(
-                            "merlion › ",
-                            Style::default()
-                                .fg(Color::Green)
-                                .add_modifier(Modifier::BOLD),
-                        ),
-                        Span::raw(first.to_string()),
+                        Span::styled("merlion › ", theme.assistant_text),
+                        Span::styled(first.to_string(), theme.assistant_text),
                     ]));
                 }
                 for rest in iter {
-                    out.push(Line::from(Span::raw(format!("          {rest}"))));
+                    out.push(Line::from(Span::styled(
+                        format!("          {rest}"),
+                        theme.assistant_text,
+                    )));
                 }
                 out.push(Line::from(""));
             }
@@ -131,34 +125,28 @@ fn render_turns(turns: &[RenderedTurn]) -> Vec<Line<'static>> {
                 let args_preview = preview_args(args);
                 out.push(Line::from(Span::styled(
                     format!("· tool {name} {args_preview}"),
-                    Style::default().add_modifier(Modifier::DIM),
+                    theme.tool_call,
                 )));
                 if *finished {
                     let head: String =
                         content.lines().next().unwrap_or("").chars().take(120).collect();
                     let tag = if *is_error { "ERR" } else { "ok" };
                     let style = if *is_error {
-                        Style::default().fg(Color::Red).add_modifier(Modifier::DIM)
+                        theme.tool_err
                     } else {
-                        Style::default().add_modifier(Modifier::DIM)
+                        theme.tool_ok
                     };
                     out.push(Line::from(Span::styled(
                         format!("  ↪ {tag}: {head}"),
                         style,
                     )));
                 } else {
-                    out.push(Line::from(Span::styled(
-                        "  ↪ …",
-                        Style::default().add_modifier(Modifier::DIM),
-                    )));
+                    out.push(Line::from(Span::styled("  ↪ …", theme.tool_call)));
                 }
             }
             RenderedTurn::Info(text) => {
                 for l in text.lines() {
-                    out.push(Line::from(Span::styled(
-                        l.to_string(),
-                        Style::default().add_modifier(Modifier::DIM),
-                    )));
+                    out.push(Line::from(Span::styled(l.to_string(), theme.info)));
                 }
             }
         }
@@ -185,18 +173,15 @@ fn input_height(input: &str) -> u16 {
 fn draw_input(f: &mut Frame, area: Rect, app: &App) {
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().add_modifier(Modifier::DIM))
-        .title(Span::styled(
-            " input ",
-            Style::default().add_modifier(Modifier::DIM),
-        ));
+        .border_style(app.theme.input_prompt)
+        .title(Span::styled(" input ", app.theme.input_prompt));
     let inner = block.inner(area);
     f.render_widget(block, area);
 
     let text = if app.input.is_empty() {
         Text::from(Line::from(Span::styled(
             "type a message — Enter sends, Ctrl+J for newline",
-            Style::default().add_modifier(Modifier::DIM),
+            app.theme.info,
         )))
     } else {
         let mut lines: Vec<Line> = Vec::new();
@@ -231,4 +216,58 @@ fn cursor_rowcol(s: &str, byte_pos: usize) -> (usize, usize) {
         }
     }
     (row, col)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn user_turn_uses_theme_user_text_style() {
+        let theme = Theme::load();
+        let turns = vec![RenderedTurn::UserText("hello".into())];
+        let lines = render_turns(&turns, &theme);
+        // First line, first span: the "you › " prefix styled with user_text.
+        let first_span = &lines[0].spans[0];
+        assert_eq!(first_span.content, "you › ");
+        assert_eq!(first_span.style, theme.user_text);
+    }
+
+    #[test]
+    fn tool_call_error_uses_theme_tool_err() {
+        let theme = Theme::load();
+        let turns = vec![RenderedTurn::ToolCall {
+            name: "bash".into(),
+            args: serde_json::json!({"cmd": "ls"}),
+            content: "boom".into(),
+            is_error: true,
+            finished: true,
+        }];
+        let lines = render_turns(&turns, &theme);
+        // Two lines: call header (tool_call), then result (tool_err).
+        assert_eq!(lines[0].spans[0].style, theme.tool_call);
+        assert_eq!(lines[1].spans[0].style, theme.tool_err);
+    }
+
+    #[test]
+    fn tool_call_ok_uses_theme_tool_ok() {
+        let theme = Theme::load();
+        let turns = vec![RenderedTurn::ToolCall {
+            name: "bash".into(),
+            args: serde_json::json!({"cmd": "ls"}),
+            content: "fine".into(),
+            is_error: false,
+            finished: true,
+        }];
+        let lines = render_turns(&turns, &theme);
+        assert_eq!(lines[1].spans[0].style, theme.tool_ok);
+    }
+
+    #[test]
+    fn info_line_uses_theme_info() {
+        let theme = Theme::load();
+        let turns = vec![RenderedTurn::Info("welcome".into())];
+        let lines = render_turns(&turns, &theme);
+        assert_eq!(lines[0].spans[0].style, theme.info);
+    }
 }

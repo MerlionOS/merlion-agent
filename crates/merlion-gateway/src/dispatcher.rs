@@ -9,6 +9,7 @@
 //! existing `merlion-session::SessionDB`.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use merlion_core::{Agent, AgentEvent, Curator, Message};
@@ -17,6 +18,7 @@ use tokio::sync::{mpsc, Mutex};
 use tracing::{info, warn};
 
 use crate::allowlist::Allowlist;
+use crate::joinkeys::JoinKeyStore;
 use crate::types::{IncomingMessage, OutgoingMessage};
 use crate::Result;
 
@@ -26,6 +28,8 @@ pub struct Dispatcher {
     system_prompt: String,
     allowlist: Allowlist,
     sessions: Mutex<HashMap<String, SessionState>>,
+    join_store: Arc<Mutex<JoinKeyStore>>,
+    join_store_path: Option<PathBuf>,
 }
 
 struct SessionState {
@@ -40,7 +44,29 @@ impl Dispatcher {
         system_prompt: String,
         allowlist: Allowlist,
     ) -> Self {
-        Self { agent, db, system_prompt, allowlist, sessions: Mutex::new(HashMap::new()) }
+        Self {
+            agent,
+            db,
+            system_prompt,
+            allowlist,
+            sessions: Mutex::new(HashMap::new()),
+            join_store: Arc::new(Mutex::new(JoinKeyStore::default())),
+            join_store_path: None,
+        }
+    }
+
+    /// Attach a shared [`JoinKeyStore`] so `/join` and `/leave` from
+    /// messaging users can rebind their session_id to a CLI session. The
+    /// optional path is where binding mutations are persisted; pass `None`
+    /// to keep the store in-memory only (used by tests).
+    pub fn with_join_store(
+        mut self,
+        store: Arc<Mutex<JoinKeyStore>>,
+        path: Option<PathBuf>,
+    ) -> Self {
+        self.join_store = store;
+        self.join_store_path = path;
+        self
     }
 
     /// Run the dispatcher loop until `incoming_rx` closes. Replies are
@@ -83,7 +109,7 @@ impl Dispatcher {
             return Ok(());
         }
 
-        let session_id = msg.user.session_id();
+        let session_id = self.resolve_session_id(&msg).await;
         let user_text = match self.handle_slash(&msg, &session_id).await? {
             SlashOutcome::Forward(text) => text,
             SlashOutcome::Reply(text) => {
@@ -207,11 +233,68 @@ impl Dispatcher {
                 drop(new_session_id);
                 Ok(SlashOutcome::Reply("started a fresh in-memory session".into()))
             }
+            "/join" => {
+                let key = rest.trim();
+                if key.is_empty() {
+                    return Ok(SlashOutcome::Reply(
+                        "usage: /join <key> — get a key by running /share in the CLI".into(),
+                    ));
+                }
+                let resolved = {
+                    let mut store = self.join_store.lock().await;
+                    let resolved = store.consume(key);
+                    if let Some(sid) = resolved.as_ref() {
+                        store.bind(&msg.user.platform, &msg.user.id, sid.clone());
+                        if let Some(path) = self.join_store_path.as_ref() {
+                            if let Err(e) = store.save(path) {
+                                warn!(error = %e, "failed to persist join_keys.yaml after bind");
+                            }
+                        }
+                    }
+                    resolved
+                };
+                match resolved {
+                    Some(sid) => {
+                        let short: String = sid.chars().take(8).collect();
+                        // Drop any cached state under the old (per-platform)
+                        // session id so the next turn loads the adopted one
+                        // from the DB.
+                        self.sessions.lock().await.remove(session_id);
+                        Ok(SlashOutcome::Reply(format!("joined session {short}")))
+                    }
+                    None => Ok(SlashOutcome::Reply("invalid or expired key.".into())),
+                }
+            }
+            "/leave" => {
+                {
+                    let mut store = self.join_store.lock().await;
+                    store.unbind(&msg.user.platform, &msg.user.id);
+                    if let Some(path) = self.join_store_path.as_ref() {
+                        if let Err(e) = store.save(path) {
+                            warn!(error = %e, "failed to persist join_keys.yaml after unbind");
+                        }
+                    }
+                }
+                // Drop the cached adopted-session state; next message will
+                // fall back to the default per-platform session id.
+                self.sessions.lock().await.remove(session_id);
+                Ok(SlashOutcome::Reply(
+                    "left session, back to per-platform session".into(),
+                ))
+            }
             "/help" => Ok(SlashOutcome::Reply(
-                "Commands: /new (start fresh) · /help".into(),
+                "Commands: /new (start fresh) · /join <key> · /leave · /help".into(),
             )),
             _ => Ok(SlashOutcome::Forward(format!("{cmd} {rest}").trim().to_string())),
         }
+    }
+
+    async fn resolve_session_id(&self, msg: &IncomingMessage) -> String {
+        let store = self.join_store.lock().await;
+        if let Some(sid) = store.lookup_binding(&msg.user.platform, &msg.user.id) {
+            return sid.to_string();
+        }
+        msg.user.session_id()
     }
 
     async fn load_state(&self, session_id: &str) -> Result<SessionState> {

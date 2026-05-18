@@ -18,8 +18,11 @@ futures.workspace = true
 reqwest = { workspace = true, features = ["json", "stream"] }
 async-trait.workspace = true
 tracing.workspace = true
+chrono.workspace = true
 bytes = "1.7"
 async-stream = "0.3"
+hmac = "0.12"
+sha2 = "0.10"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }

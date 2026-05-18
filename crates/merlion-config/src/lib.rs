@@ -68,6 +68,14 @@ pub enum Wire {
     Anthropic,
     /// `POST /models/<m>:streamGenerateContent?alt=sse` with `x-goog-api-key: <key>`.
     Gemini,
+    /// AWS Bedrock — SigV4-signed `POST /model/<id>/invoke`. Reads
+    /// `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN`
+    /// from env, region from `AWS_REGION` (default us-east-1).
+    Bedrock,
+    /// Google Vertex AI — Gemini wire format, auth via `gcloud auth
+    /// print-access-token`. Reads `GOOGLE_CLOUD_PROJECT` and
+    /// `GOOGLE_CLOUD_REGION` (default us-central1) from env.
+    Vertex,
 }
 
 pub struct ResolvedProvider {
@@ -95,10 +103,15 @@ impl Config {
             "deepseek" => ("https://api.deepseek.com/v1", "DEEPSEEK_API_KEY", Wire::OpenAi),
             "anthropic" => ("https://api.anthropic.com/v1", "ANTHROPIC_API_KEY", Wire::Anthropic),
             "gemini" => ("https://generativelanguage.googleapis.com/v1beta", "GEMINI_API_KEY", Wire::Gemini),
+            // Bedrock/Vertex don't use base_url or api_key_env — they each
+            // have their own credential mechanism (SigV4 / gcloud OAuth).
+            // The placeholders below are kept for `merlion doctor`'s probe.
+            "bedrock" => ("https://bedrock-runtime.us-east-1.amazonaws.com", "AWS_ACCESS_KEY_ID", Wire::Bedrock),
+            "vertex" => ("https://us-central1-aiplatform.googleapis.com", "GOOGLE_CLOUD_PROJECT", Wire::Vertex),
             other => {
                 anyhow::bail!(
                     "unknown provider `{other}`. Set `model.base_url` and `model.api_key_env` explicitly, \
-                     or use one of: openai, openrouter, nous, novita, moonshot, minimax, zai, groq, deepseek, anthropic, gemini."
+                     or use one of: openai, openrouter, nous, novita, moonshot, minimax, zai, groq, deepseek, anthropic, gemini, bedrock, vertex."
                 );
             }
         };

@@ -1,21 +1,20 @@
 //! LLM provider adapters.
 //!
-//! - [`OpenAiClient`] speaks `/v1/chat/completions` and covers Nous Portal,
-//!   OpenRouter, NovitaAI, NVIDIA NIM, Moonshot, MiniMax, z.ai/GLM, Groq,
-//!   DeepSeek, and any other endpoint that implements the chat-completions
-//!   protocol.
-//! - [`AnthropicClient`] speaks Anthropic's native `/v1/messages` API with
-//!   `x-api-key` auth, top-level `system`, and tool_use/tool_result content
-//!   blocks.
-//! - [`GeminiClient`] speaks Google's `models/<m>:streamGenerateContent`
-//!   with `x-goog-api-key` auth, `system_instruction`, and
-//!   `functionCall`/`functionResponse` parts.
+//! - [`OpenAiClient`] — `/v1/chat/completions` (covers 9 providers).
+//! - [`AnthropicClient`] — Anthropic native `/v1/messages`.
+//! - [`GeminiClient`] — Google AI Studio `streamGenerateContent`.
+//! - [`BedrockClient`] — AWS Bedrock (Anthropic models, SigV4-signed, non-streaming).
+//! - [`VertexClient`] — Google Vertex AI (Gemini wire, gcloud OAuth bearer).
 
 pub mod anthropic;
+pub mod bedrock;
 pub mod gemini;
 pub mod openai;
 pub mod retry;
+pub mod vertex;
 
 pub use anthropic::AnthropicClient;
+pub use bedrock::BedrockClient;
 pub use gemini::GeminiClient;
 pub use openai::OpenAiClient;
+pub use vertex::VertexClient;

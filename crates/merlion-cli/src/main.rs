@@ -7,7 +7,7 @@ use merlion_config::{Config, Wire};
 use merlion_core::{
     Agent, AgentEvent, AgentOptions, Curator, LlmClient, Message, ToolApprover, ToolRegistry,
 };
-use merlion_llm::{AnthropicClient, GeminiClient, OpenAiClient};
+use merlion_llm::{AnthropicClient, BedrockClient, GeminiClient, OpenAiClient, VertexClient};
 use merlion_mcp::{
     make_exposed_name, McpClient, McpProxyTool, McpRegistry, ServerEntry, StdioTransport,
     TransportSpec,
@@ -75,8 +75,14 @@ enum Command {
         #[command(subcommand)]
         action: CronAction,
     },
-    /// Check for a newer merlion release on GitHub and print install hints.
-    Update,
+    /// Check for a newer merlion release on GitHub. Pass --apply to actually
+    /// download and swap the binary (Unix only).
+    Update {
+        /// Download the latest tarball and replace the running binary. The
+        /// running process exits after a successful swap.
+        #[arg(long)]
+        apply: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -188,34 +194,122 @@ async fn main() -> Result<()> {
         Command::Mcp { action } => mcp_cmd(action).await,
         Command::Gateway { action } => gateway_cmd(cfg, action).await,
         Command::Cron { action } => cron_cmd(cfg, action).await,
-        Command::Update => update_cmd().await,
+        Command::Update { apply } => update_cmd(apply).await,
     }
 }
 
-async fn update_cmd() -> Result<()> {
+async fn update_cmd(apply: bool) -> Result<()> {
     let api = "https://api.github.com/repos/MerlionOS/merlion-agent/releases/latest";
     let client = reqwest::Client::builder()
         .user_agent(concat!("merlion/", env!("CARGO_PKG_VERSION")))
         .build()?;
     let resp = client.get(api).send().await?;
     if !resp.status().is_success() {
-        anyhow::bail!("github releases api {}: {}", resp.status(), resp.text().await.unwrap_or_default());
+        anyhow::bail!(
+            "github releases api {}: {}",
+            resp.status(),
+            resp.text().await.unwrap_or_default()
+        );
     }
     let body: serde_json::Value = resp.json().await?;
     let latest = body.get("tag_name").and_then(|v| v.as_str()).unwrap_or("(unknown)");
-    let current = format!("v{}", env!("CARGO_PKG_VERSION"));
-    println!("installed:  {current}");
+    let current_full = format!("v{}", env!("CARGO_PKG_VERSION"));
+    println!("installed:  {current_full}");
     println!("latest tag: {latest}");
-    if latest == current || latest == format!("v{current}") {
+    if latest == current_full {
         println!("already up to date.");
         return Ok(());
     }
-    println!();
-    println!("To upgrade:");
-    println!("  cargo binstall merlion --version {}", latest.trim_start_matches('v'));
-    println!("  brew upgrade merlion          # if installed via Homebrew");
-    println!("  curl -fsSL https://raw.githubusercontent.com/MerlionOS/merlion-agent/main/scripts/install.sh | bash");
+
+    if !apply {
+        println!();
+        println!("To upgrade:");
+        println!("  merlion update --apply        # download + swap the binary (Unix)");
+        println!("  cargo binstall merlion --version {}", latest.trim_start_matches('v'));
+        println!("  brew upgrade merlion          # if installed via Homebrew");
+        println!(
+            "  curl -fsSL https://raw.githubusercontent.com/MerlionOS/merlion-agent/main/scripts/install.sh | bash"
+        );
+        return Ok(());
+    }
+
+    // --apply path: download tarball, extract, swap.
+    if cfg!(windows) {
+        anyhow::bail!(
+            "`merlion update --apply` is unix-only for now; on Windows please run the installer manually"
+        );
+    }
+    let target = detect_target_triple().context("could not infer this binary's target triple")?;
+    let assets = body.get("assets").and_then(|a| a.as_array()).cloned().unwrap_or_default();
+    let asset_name = format!("merlion-{target}.tar.gz");
+    let asset = assets
+        .iter()
+        .find(|a| a.get("name").and_then(|n| n.as_str()) == Some(&asset_name))
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "no release asset named `{asset_name}` on tag {latest}; available: {:?}",
+                assets.iter().filter_map(|a| a.get("name").and_then(|n| n.as_str())).collect::<Vec<_>>()
+            )
+        })?;
+    let url = asset
+        .get("browser_download_url")
+        .and_then(|u| u.as_str())
+        .ok_or_else(|| anyhow::anyhow!("asset missing browser_download_url"))?;
+
+    println!("downloading {url}");
+    let tarball = client.get(url).send().await?.error_for_status()?.bytes().await?;
+
+    let tmp = tempfile::tempdir().context("create temp dir")?;
+    let tar_path = tmp.path().join(&asset_name);
+    std::fs::write(&tar_path, &tarball).context("write tarball")?;
+    println!("extracting…");
+    let status = std::process::Command::new("tar")
+        .arg("-xzf")
+        .arg(&tar_path)
+        .current_dir(tmp.path())
+        .status()
+        .context("tar -xzf failed (is `tar` installed?)")?;
+    if !status.success() {
+        anyhow::bail!("tar -xzf exited with {status}");
+    }
+
+    let extracted = tmp.path().join(format!("merlion-{target}")).join("merlion");
+    if !extracted.exists() {
+        anyhow::bail!(
+            "extracted layout unexpected — expected {} to exist",
+            extracted.display()
+        );
+    }
+
+    let current_exe = std::env::current_exe().context("current_exe")?;
+    println!("replacing {} → {}", current_exe.display(), extracted.display());
+    // rename across filesystems can fail; fall back to copy+remove.
+    if std::fs::rename(&extracted, &current_exe).is_err() {
+        std::fs::copy(&extracted, &current_exe).context("copy new binary into place")?;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&current_exe)?.permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&current_exe, perms)?;
+    }
+    println!("upgraded to {latest}. Restart any running merlion processes.");
     Ok(())
+}
+
+/// Best-effort detection of `cargo` target triple for this binary. Used by
+/// `merlion update --apply` to pick the right release tarball.
+fn detect_target_triple() -> Option<String> {
+    let os = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
+    match (os, arch) {
+        ("linux", "x86_64") => Some("x86_64-unknown-linux-gnu".into()),
+        ("linux", "aarch64") => Some("aarch64-unknown-linux-gnu".into()),
+        ("macos", "x86_64") => Some("x86_64-apple-darwin".into()),
+        ("macos", "aarch64") => Some("aarch64-apple-darwin".into()),
+        _ => None,
+    }
 }
 
 fn model_cmd(mut cfg: Config, id: Option<String>) -> Result<()> {
@@ -590,6 +684,8 @@ async fn start_gateways(cfg: Config) -> Result<()> {
         Wire::OpenAi => Arc::new(OpenAiClient::new(provider.base_url.clone(), api_key)?),
         Wire::Anthropic => Arc::new(AnthropicClient::new(provider.base_url.clone(), api_key)?),
         Wire::Gemini => Arc::new(GeminiClient::new(provider.base_url.clone(), api_key)?),
+        Wire::Bedrock => Arc::new(BedrockClient::from_env()?),
+        Wire::Vertex => Arc::new(VertexClient::from_env()?),
     };
 
     let mut tools = ToolRegistry::new();
@@ -759,6 +855,8 @@ async fn build_cli_runner(cfg: Config) -> Result<CliJobRunner> {
         Wire::OpenAi => Arc::new(OpenAiClient::new(provider.base_url.clone(), api_key)?),
         Wire::Anthropic => Arc::new(AnthropicClient::new(provider.base_url.clone(), api_key)?),
         Wire::Gemini => Arc::new(GeminiClient::new(provider.base_url.clone(), api_key)?),
+        Wire::Bedrock => Arc::new(BedrockClient::from_env()?),
+        Wire::Vertex => Arc::new(VertexClient::from_env()?),
     };
     let mut tools = ToolRegistry::new();
     merlion_tools::register_defaults(&mut tools);
@@ -878,6 +976,8 @@ async fn chat(cfg: Config, resume: Option<String>, want_tui: bool, no_tui: bool)
         Wire::OpenAi => Arc::new(OpenAiClient::new(provider.base_url.clone(), api_key)?),
         Wire::Anthropic => Arc::new(AnthropicClient::new(provider.base_url.clone(), api_key)?),
         Wire::Gemini => Arc::new(GeminiClient::new(provider.base_url.clone(), api_key)?),
+        Wire::Bedrock => Arc::new(BedrockClient::from_env()?),
+        Wire::Vertex => Arc::new(VertexClient::from_env()?),
     };
 
     let home = merlion_config::merlion_home();
@@ -996,11 +1096,25 @@ async fn chat(cfg: Config, resume: Option<String>, want_tui: bool, no_tui: bool)
             "/help" => {
                 println!("/exit         — leave the session");
                 println!("/new          — start a fresh session");
+                println!("/share        — mint a join key to continue this session from a messaging platform");
                 println!("/usage        — print message count");
                 println!("/model        — print active model");
                 println!("/skills       — list available skills");
                 println!("/memory       — list memories");
                 println!("/<skill-name> — invoke a skill (prepends its body as a turn)");
+                continue;
+            }
+            "/share" => {
+                let path = merlion_gateway::JoinKeyStore::default_path();
+                let mut store = merlion_gateway::JoinKeyStore::load(&path).unwrap_or_default();
+                store.gc();
+                let key = store.mint(session_id.clone(), 600);
+                if let Err(e) = store.save(&path) {
+                    eprintln!("warning: failed to persist join key to {}: {e}", path.display());
+                }
+                println!("Join key: {key}");
+                println!("Send `/join {key}` from Telegram/Discord/Slack within 10 minutes to");
+                println!("continue this conversation on that platform.");
                 continue;
             }
             "/usage" => {

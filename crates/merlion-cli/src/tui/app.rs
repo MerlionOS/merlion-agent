@@ -23,6 +23,7 @@ use ratatui::Terminal;
 use tokio::sync::mpsc;
 
 use super::render;
+use super::theme::Theme;
 
 /// One renderable item in the conversation pane.
 pub enum RenderedTurn {
@@ -64,6 +65,8 @@ pub struct App {
     /// per-turn usages). Rendered in the status line.
     pub usage: Usage,
 
+    pub theme: Theme,
+
     pub should_quit: bool,
 }
 
@@ -91,6 +94,7 @@ impl App {
             skill_count,
             memory_count,
             usage: Usage::default(),
+            theme: Theme::load(),
             should_quit: false,
         }
     }
@@ -272,7 +276,9 @@ async fn run_loop(
                 if trimmed.is_empty() {
                     continue;
                 }
-                let user_text = match resolve_input(&mut app, &trimmed, agent, skills, messages) {
+                let user_text = match resolve_input(
+                    &mut app, &trimmed, agent, skills, messages, session_id,
+                ) {
                     SubmitResolution::Local => {
                         terminal.draw(|f| render::draw(f, &app))?;
                         continue;
@@ -474,14 +480,15 @@ fn resolve_input(
     agent: &Agent,
     skills: &SkillSet,
     messages: &[Message],
+    session_id: &str,
 ) -> SubmitResolution {
     match trimmed {
         "/exit" | "/quit" => return SubmitResolution::Quit,
         "/help" => {
             app.messages.push(RenderedTurn::Info(
-                "/exit — leave · /new — fresh session · /usage — message count · \
-                 /model — active model · /skills — list skills · \
-                 /<skill-name> — invoke skill"
+                "/exit — leave · /new — fresh session · /share — mint join key · \
+                 /usage — message count · /model — active model · \
+                 /skills — list skills · /<skill-name> — invoke skill"
                     .into(),
             ));
             app.pin_to_bottom();
@@ -501,6 +508,22 @@ fn resolve_input(
         }
         "/skills" => {
             app.messages.push(RenderedTurn::Info(skills.help_index()));
+            app.pin_to_bottom();
+            return SubmitResolution::Local;
+        }
+        "/share" => {
+            let path = merlion_gateway::JoinKeyStore::default_path();
+            let mut store = merlion_gateway::JoinKeyStore::load(&path).unwrap_or_default();
+            store.gc();
+            let key = store.mint(session_id.to_string(), 600);
+            let save_note = match store.save(&path) {
+                Ok(()) => String::new(),
+                Err(e) => format!(" (warning: failed to persist: {e})"),
+            };
+            app.messages.push(RenderedTurn::Info(format!(
+                "Join key: {key} — send `/join {key}` from Telegram/Discord/Slack within \
+                 10 minutes to continue this conversation on that platform.{save_note}"
+            )));
             app.pin_to_bottom();
             return SubmitResolution::Local;
         }

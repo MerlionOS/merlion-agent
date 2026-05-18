@@ -8,8 +8,8 @@
 mod app;
 mod input;
 mod render;
-#[allow(dead_code)] // Wired up by render in a follow-up; surfaced here so
-                    // settings work can land independently.
 mod theme;
 
 pub use app::run;
+#[allow(unused_imports)]
+pub use theme::Theme;
