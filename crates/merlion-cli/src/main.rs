@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -20,6 +20,7 @@ use tokio::sync::mpsc;
 use tracing_subscriber::EnvFilter;
 
 mod approver;
+mod tui;
 
 #[derive(Debug, Parser)]
 #[command(name = "merlion", version, about = "Merlion Agent — Rust port of hermes-agent")]
@@ -35,6 +36,12 @@ enum Command {
         /// Resume a specific session id instead of starting a new one.
         #[arg(long)]
         session: Option<String>,
+        /// Force the ratatui-based TUI even when stdout is not a TTY.
+        #[arg(long)]
+        tui: bool,
+        /// Force the plain line-based REPL even when stdout is a TTY.
+        #[arg(long)]
+        no_tui: bool,
     },
     /// Print or set the active model. `merlion model openai:gpt-4o-mini`
     Model {
@@ -58,6 +65,45 @@ enum Command {
         #[command(subcommand)]
         action: McpAction,
     },
+    /// Run the messaging gateway (Telegram).
+    Gateway {
+        #[command(subcommand)]
+        action: GatewayAction,
+    },
+    /// Manage scheduled jobs.
+    Cron {
+        #[command(subcommand)]
+        action: CronAction,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum GatewayAction {
+    /// Start the gateway daemon. Reads TELEGRAM_BOT_TOKEN +
+    /// MERLION_GATEWAY_ALLOW_TELEGRAM from the environment.
+    Start,
+    /// Print expected env-var configuration.
+    Status,
+}
+
+#[derive(Debug, Subcommand)]
+enum CronAction {
+    /// List configured jobs.
+    List,
+    /// Add a job: `merlion cron add daily-summary "0 0 9 * * *" "summarize my inbox"`.
+    Add {
+        name: String,
+        schedule: String,
+        prompt: String,
+        #[arg(long, default_value = "cli")]
+        destination: String,
+    },
+    /// Remove a job.
+    Remove { name: String },
+    /// Run a job once immediately (does not affect the schedule).
+    Run { name: String },
+    /// Run the scheduler in the foreground; fires jobs as they come due.
+    Daemon,
 }
 
 #[derive(Debug, Subcommand)]
@@ -112,13 +158,18 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     let cfg = merlion_config::load().context("loading config")?;
 
-    match cli.command.unwrap_or(Command::Chat { session: None }) {
-        Command::Chat { session } => chat(cfg, session).await,
+    match cli
+        .command
+        .unwrap_or(Command::Chat { session: None, tui: false, no_tui: false })
+    {
+        Command::Chat { session, tui, no_tui } => chat(cfg, session, tui, no_tui).await,
         Command::Model { id } => model_cmd(cfg, id),
         Command::Config { action } => config_cmd(cfg, action),
         Command::Doctor => doctor(cfg),
         Command::Sessions { action } => sessions_cmd(action),
         Command::Mcp { action } => mcp_cmd(action).await,
+        Command::Gateway { action } => gateway_cmd(cfg, action).await,
+        Command::Cron { action } => cron_cmd(cfg, action).await,
     }
 }
 
@@ -317,7 +368,201 @@ async fn connect_server(entry: &ServerEntry) -> Result<McpClient> {
     Ok(McpClient::new(transport))
 }
 
-async fn chat(cfg: Config, resume: Option<String>) -> Result<()> {
+async fn gateway_cmd(cfg: Config, action: GatewayAction) -> Result<()> {
+    match action {
+        GatewayAction::Status => {
+            println!("Required env vars:");
+            println!("  TELEGRAM_BOT_TOKEN              — bot token from @BotFather");
+            println!("  MERLION_GATEWAY_ALLOW_TELEGRAM  — comma-separated user ids");
+            println!("                                    (or MERLION_GATEWAY_ALLOW_ALL=1)");
+            let tok = std::env::var("TELEGRAM_BOT_TOKEN").is_ok();
+            let allow = std::env::var("MERLION_GATEWAY_ALLOW_TELEGRAM").is_ok()
+                || std::env::var("MERLION_GATEWAY_ALLOW_ALL").is_ok();
+            println!();
+            println!(
+                "TELEGRAM_BOT_TOKEN:               {}",
+                if tok { "set" } else { "MISSING" }
+            );
+            println!(
+                "allowlist (telegram / allow-all): {}",
+                if allow { "set" } else { "MISSING" }
+            );
+            Ok(())
+        }
+        GatewayAction::Start => {
+            use merlion_gateway::{Allowlist, Dispatcher, Gateway, TelegramGateway};
+            use std::sync::Arc;
+            use tokio::sync::{mpsc, Mutex};
+
+            let provider = cfg.resolve_provider()?;
+            let api_key = std::env::var(&provider.api_key_env).ok();
+            let llm: Arc<dyn LlmClient> = match provider.wire {
+                Wire::OpenAi => Arc::new(OpenAiClient::new(provider.base_url.clone(), api_key)?),
+                Wire::Anthropic => {
+                    Arc::new(AnthropicClient::new(provider.base_url.clone(), api_key)?)
+                }
+                Wire::Gemini => Arc::new(GeminiClient::new(provider.base_url.clone(), api_key)?),
+            };
+
+            let mut tools = ToolRegistry::new();
+            merlion_tools::register_defaults(&mut tools);
+
+            let mut options = AgentOptions::default();
+            options.model = provider.model.clone();
+            options.temperature = cfg.model.temperature;
+            options.max_tokens = cfg.model.max_tokens;
+            options.max_iterations = cfg.max_iterations;
+            // Gateway runs unattended — bypass approval prompts.
+            let approver: Arc<dyn ToolApprover> =
+                Arc::new(merlion_core::AllowAllApprover);
+            let agent = Arc::new(
+                Agent::new(llm, tools, options).with_approver(approver),
+            );
+
+            let db = Arc::new(Mutex::new(SessionDB::open_default()?));
+            let allowlist = Allowlist::from_env();
+            let system_prompt = cfg
+                .system_prompt
+                .clone()
+                .unwrap_or_else(|| {
+                    "You are Merlion, a coding agent reachable over Telegram. \
+                     Reply succinctly; messaging UIs don't render tool output. \
+                     Use the `memory` tool to remember durable facts."
+                        .into()
+                });
+
+            let dispatcher = Arc::new(Dispatcher::new(agent, db, system_prompt, allowlist));
+            let (incoming_tx, incoming_rx) = mpsc::channel(64);
+            let (outgoing_tx, outgoing_rx) = mpsc::channel(64);
+
+            let dispatcher_task = {
+                let d = dispatcher.clone();
+                tokio::spawn(async move { d.run(incoming_rx, outgoing_tx).await })
+            };
+
+            let telegram = Arc::new(TelegramGateway::from_env()?);
+            println!("gateway started: {}", telegram.name());
+            telegram
+                .run(incoming_tx, outgoing_rx)
+                .await
+                .map_err(|e| anyhow::anyhow!("gateway: {e}"))?;
+            let _ = dispatcher_task.await;
+            Ok(())
+        }
+    }
+}
+
+async fn cron_cmd(cfg: Config, action: CronAction) -> Result<()> {
+    use merlion_cron::{CronRegistry, Job};
+    let path = CronRegistry::default_path();
+    let mut reg = CronRegistry::load(&path).map_err(|e| anyhow::anyhow!("loading cron: {e}"))?;
+    match action {
+        CronAction::List => {
+            if reg.jobs.is_empty() {
+                println!("(no jobs configured)");
+                return Ok(());
+            }
+            for j in &reg.jobs {
+                let status = if j.enabled { "enabled " } else { "disabled" };
+                println!("{status}  {}\t{}\t→ {}\n  prompt: {}", j.name, j.schedule, j.destination, j.prompt);
+            }
+            Ok(())
+        }
+        CronAction::Add { name, schedule, prompt, destination } => {
+            let job = Job { name: name.clone(), schedule, prompt, enabled: true, destination };
+            reg.add(job).map_err(|e| anyhow::anyhow!("add: {e}"))?;
+            reg.save(&path).map_err(|e| anyhow::anyhow!("save: {e}"))?;
+            println!("added cron job `{name}`");
+            Ok(())
+        }
+        CronAction::Remove { name } => {
+            if reg.remove(&name).is_some() {
+                reg.save(&path).map_err(|e| anyhow::anyhow!("save: {e}"))?;
+                println!("removed `{name}`");
+            } else {
+                println!("(no job named `{name}`)");
+            }
+            Ok(())
+        }
+        CronAction::Run { name } => {
+            use merlion_cron::scheduler::JobRunner;
+            let job = reg
+                .get(&name)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("no job named `{name}`"))?;
+            let runner = build_cli_runner(cfg).await?;
+            runner.run_job(&job).await;
+            Ok(())
+        }
+        CronAction::Daemon => {
+            let runner = build_cli_runner(cfg).await?;
+            let scheduler = merlion_cron::Scheduler::new(reg, std::sync::Arc::new(runner));
+            scheduler.run().await.map_err(|e| anyhow::anyhow!("scheduler: {e}"))?;
+            Ok(())
+        }
+    }
+}
+
+/// Build a cron JobRunner that constructs an Agent from `cfg`, runs the
+/// prompt, and prints the response to stdout. (Destination-aware delivery
+/// is a Phase 5.6 follow-up.)
+async fn build_cli_runner(cfg: Config) -> Result<CliJobRunner> {
+    let provider = cfg.resolve_provider()?;
+    let api_key = std::env::var(&provider.api_key_env).ok();
+    let llm: Arc<dyn LlmClient> = match provider.wire {
+        Wire::OpenAi => Arc::new(OpenAiClient::new(provider.base_url.clone(), api_key)?),
+        Wire::Anthropic => Arc::new(AnthropicClient::new(provider.base_url.clone(), api_key)?),
+        Wire::Gemini => Arc::new(GeminiClient::new(provider.base_url.clone(), api_key)?),
+    };
+    let mut tools = ToolRegistry::new();
+    merlion_tools::register_defaults(&mut tools);
+    let mut options = AgentOptions::default();
+    options.model = provider.model.clone();
+    options.max_iterations = cfg.max_iterations;
+    let approver: Arc<dyn ToolApprover> = Arc::new(merlion_core::AllowAllApprover);
+    let agent = Agent::new(llm, tools, options).with_approver(approver);
+    let system_prompt = cfg
+        .system_prompt
+        .clone()
+        .unwrap_or_else(|| "You are Merlion, running a scheduled task non-interactively.".into());
+    Ok(CliJobRunner { agent: Arc::new(agent), system_prompt })
+}
+
+struct CliJobRunner {
+    agent: Arc<Agent>,
+    system_prompt: String,
+}
+
+#[async_trait::async_trait]
+impl merlion_cron::scheduler::JobRunner for CliJobRunner {
+    async fn run_job(&self, job: &merlion_cron::Job) {
+        let mut messages =
+            vec![Message::system(&self.system_prompt), Message::user(&job.prompt)];
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<AgentEvent>(64);
+        let agent = self.agent.clone();
+        let task = tokio::spawn(async move {
+            let _ = agent.run(&mut messages, tx).await;
+            messages
+        });
+        let mut reply = String::new();
+        while let Some(ev) = rx.recv().await {
+            if let AgentEvent::AssistantMessage(m) = ev {
+                if let Some(c) = m.content {
+                    reply.push_str(&c);
+                }
+            }
+        }
+        let _ = task.await;
+        println!(
+            "[cron {}] @ {} → {}",
+            job.name,
+            chrono::Utc::now().to_rfc3339(),
+            reply
+        );
+    }
+}
+
+async fn chat(cfg: Config, resume: Option<String>, want_tui: bool, no_tui: bool) -> Result<()> {
     let provider = cfg.resolve_provider()?;
     let api_key = std::env::var(&provider.api_key_env).ok();
     if api_key.is_none() {
@@ -393,6 +638,28 @@ async fn chat(cfg: Config, resume: Option<String>) -> Result<()> {
         let m = Message::system(prompt);
         db.append_message(&session_id, &m)?;
         messages.push(m);
+    }
+
+    let is_tty = std::io::stdout().is_terminal();
+    let use_tui = if want_tui {
+        true
+    } else if no_tui {
+        false
+    } else {
+        is_tty
+    };
+    if use_tui {
+        return tui::run(
+            &cfg,
+            &agent,
+            &mut messages,
+            &session_id,
+            &skills,
+            &memory_store,
+            &db,
+            &mut curator,
+        )
+        .await;
     }
 
     println!(
@@ -539,6 +806,7 @@ async fn chat(cfg: Config, resume: Option<String>) -> Result<()> {
                         println!("\n[iteration budget exhausted]");
                     }
                     AgentEvent::Done => {}
+                    AgentEvent::Usage(_) => {}
                 }
             }
         };

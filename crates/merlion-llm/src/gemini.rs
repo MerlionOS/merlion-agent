@@ -20,7 +20,7 @@ use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use merlion_core::{
-    Error, LlmClient, LlmRequest, LlmStreamEvent, Message, Result, Role, ToolCall,
+    Error, LlmClient, LlmRequest, LlmStreamEvent, Message, Result, Role, ToolCall, Usage,
 };
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use serde_json::{json, Value};
@@ -212,20 +212,11 @@ impl LlmClient for GeminiClient {
         let body = self.build_body(&req);
         let headers = self.build_headers()?;
 
-        let resp = self
-            .http
-            .post(&url)
-            .headers(headers)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| Error::Llm(format!("request: {e}")))?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
-            return Err(Error::Llm(format!("http {status}: {text}")));
-        }
+        let http = self.http.clone();
+        let resp = crate::retry::send_with_retry(|| {
+            http.post(&url).headers(headers.clone()).json(&body)
+        })
+        .await?;
 
         let stream = gemini_sse_to_events(resp.bytes_stream()).boxed();
         Ok(stream)
@@ -305,6 +296,18 @@ where
                         if !pending_calls.is_empty() {
                             let calls = std::mem::take(&mut pending_calls);
                             yield Ok(LlmStreamEvent::ToolCalls(calls));
+                        }
+                        if let Some(meta) = parsed.get("usageMetadata") {
+                            let prompt = meta.get("promptTokenCount").and_then(|v| v.as_u64()).map(|n| n as u32);
+                            let completion = meta.get("candidatesTokenCount").and_then(|v| v.as_u64()).map(|n| n as u32);
+                            let total = meta.get("totalTokenCount").and_then(|v| v.as_u64()).map(|n| n as u32);
+                            if prompt.is_some() || completion.is_some() || total.is_some() {
+                                yield Ok(LlmStreamEvent::Usage(Usage {
+                                    prompt_tokens: prompt,
+                                    completion_tokens: completion,
+                                    total_tokens: total,
+                                }));
+                            }
                         }
                         yield Ok(LlmStreamEvent::Done(Some(reason.to_string())));
                         finished = true;

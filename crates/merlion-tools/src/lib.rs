@@ -9,6 +9,7 @@ pub mod memory;
 pub mod read;
 pub mod skill_tools;
 pub mod web_fetch;
+pub mod web_search;
 pub mod write;
 
 use std::sync::Arc;
@@ -26,6 +27,7 @@ pub fn register_defaults(reg: &mut ToolRegistry) {
     reg.register(grep::Grep::default());
     reg.register(glob::Glob::default());
     reg.register(web_fetch::WebFetch::default());
+    reg.register(web_search::WebSearch::default());
 }
 
 /// Register the `memory` tool against a specific store.

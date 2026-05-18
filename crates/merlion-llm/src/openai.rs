@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use merlion_core::{
-    Error, LlmClient, LlmRequest, LlmStreamEvent, Message, Result, Role, ToolCall,
+    Error, LlmClient, LlmRequest, LlmStreamEvent, Message, Result, Role, ToolCall, Usage,
 };
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
@@ -59,6 +59,9 @@ impl OpenAiClient {
             "messages": messages,
             "stream": stream,
         });
+        if stream {
+            body["stream_options"] = json!({ "include_usage": true });
+        }
         if !req.tools.is_empty() {
             let tools: Vec<Value> = req
                 .tools
@@ -135,20 +138,11 @@ impl LlmClient for OpenAiClient {
         let body = self.build_body(&req, true);
         let headers = self.build_headers()?;
 
-        let resp = self
-            .http
-            .post(&url)
-            .headers(headers)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| Error::Llm(format!("request: {e}")))?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
-            return Err(Error::Llm(format!("http {status}: {text}")));
-        }
+        let http = self.http.clone();
+        let resp = crate::retry::send_with_retry(|| {
+            http.post(&url).headers(headers.clone()).json(&body)
+        })
+        .await?;
 
         let stream = sse_to_events(resp.bytes_stream()).boxed();
         Ok(stream)
@@ -188,6 +182,13 @@ where
                             continue;
                         }
                     };
+                    if let Some(u) = parsed.usage {
+                        yield Ok(LlmStreamEvent::Usage(Usage {
+                            prompt_tokens: u.prompt_tokens,
+                            completion_tokens: u.completion_tokens,
+                            total_tokens: u.total_tokens,
+                        }));
+                    }
                     let Some(choice) = parsed.choices.into_iter().next() else { continue };
                     let delta = choice.delta;
                     if let Some(text) = delta.content {
@@ -271,6 +272,18 @@ impl PartialToolCall {
 struct Chunk {
     #[serde(default)]
     choices: Vec<Choice>,
+    #[serde(default)]
+    usage: Option<UsageBlock>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UsageBlock {
+    #[serde(default)]
+    prompt_tokens: Option<u32>,
+    #[serde(default)]
+    completion_tokens: Option<u32>,
+    #[serde(default)]
+    total_tokens: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]

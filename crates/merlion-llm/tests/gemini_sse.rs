@@ -85,6 +85,7 @@ async fn gemini_stream_emits_text_then_function_call_then_done() {
                 assert_eq!(reason.as_deref(), Some("STOP"));
                 got_done = true;
             }
+            LlmStreamEvent::Usage(_) => {}
         }
     }
 

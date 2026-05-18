@@ -93,6 +93,7 @@ async fn anthropic_stream_emits_text_then_tool_call_then_done() {
                 assert_eq!(reason.as_deref(), Some("tool_use"));
                 got_done = true;
             }
+            LlmStreamEvent::Usage(_) => {}
         }
     }
 

@@ -1,0 +1,22 @@
+[package]
+name = "merlion-gateway"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Messaging gateway for Merlion Agent (Telegram, Discord, Slack)"
+
+[dependencies]
+merlion-core.workspace = true
+merlion-session.workspace = true
+merlion-config.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["full"] }
+async-trait.workspace = true
+tracing.workspace = true
+reqwest = { workspace = true, features = ["json", "stream"] }
+futures.workspace = true
+uuid.workspace = true

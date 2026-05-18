@@ -14,6 +14,7 @@
 pub mod anthropic;
 pub mod gemini;
 pub mod openai;
+pub mod retry;
 
 pub use anthropic::AnthropicClient;
 pub use gemini::GeminiClient;

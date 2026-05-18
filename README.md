@@ -35,6 +35,12 @@ What works today:
   -- npx -y @modelcontextprotocol/server-filesystem ~/projects` adds a
   server; its tools auto-load into the agent on next chat as
   `mcp_<server>_<tool>`
+- ratatui-based TUI auto-enabled on TTY (override with `--tui` / `--no-tui`)
+- Telegram gateway: `merlion gateway start` exposes the agent over a
+  Telegram bot (long-polling, env-var allowlist)
+- Cron scheduler: `merlion cron add daily "0 0 9 * * *" "summarize my inbox"`
+- Token-usage tracking + automatic retry on 429/5xx
+- One-line installer: `curl -fsSL .../install.sh | bash`
 - Providers: OpenAI, OpenRouter, Nous Portal, NovitaAI, Moonshot, MiniMax,
   z.ai/GLM, Groq, DeepSeek (all via `POST /chat/completions`), plus
   **Anthropic** (`POST /v1/messages`, native) and **Gemini**

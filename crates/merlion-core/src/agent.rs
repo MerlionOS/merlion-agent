@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 
 use crate::approval::{AllowAllApprover, ApprovalDecision, ToolApprover};
 use crate::error::{Error, Result};
-use crate::llm::{LlmClient, LlmRequest, LlmStreamEvent};
+use crate::llm::{LlmClient, LlmRequest, LlmStreamEvent, Usage};
 use crate::message::{Message, Role, ToolCall, ToolResult};
 use crate::tool::ToolRegistry;
 
@@ -18,6 +18,11 @@ pub struct AgentOptions {
     /// [`Agent::run`] call. Hermes calls this the iteration budget; matching
     /// that vocabulary makes the port read like the original.
     pub max_iterations: u32,
+    /// Cap on tool-result `content` length in characters. Anything longer is
+    /// truncated with a `…[truncated tool output]` suffix before being fed
+    /// back to the model. Individual tools may further restrict themselves;
+    /// this is a backstop. `0` disables truncation.
+    pub max_tool_result_chars: usize,
 }
 
 impl Default for AgentOptions {
@@ -27,6 +32,7 @@ impl Default for AgentOptions {
             temperature: None,
             max_tokens: None,
             max_iterations: 32,
+            max_tool_result_chars: 16 * 1024,
         }
     }
 }
@@ -39,6 +45,7 @@ pub enum AgentEvent {
     AssistantMessage(Message),
     ToolCallStart { id: String, name: String, arguments: serde_json::Value },
     ToolCallFinish { id: String, name: String, content: String, is_error: bool },
+    Usage(Usage),
     IterationBudgetExhausted,
     Done,
 }
@@ -107,6 +114,9 @@ impl Agent {
                     LlmStreamEvent::ToolCalls(calls) => {
                         tool_calls = calls;
                     }
+                    LlmStreamEvent::Usage(u) => {
+                        let _ = events.send(AgentEvent::Usage(u)).await;
+                    }
                     LlmStreamEvent::Done(_) => break,
                 }
             }
@@ -146,7 +156,7 @@ impl Agent {
                     })
                     .await;
 
-                let result = match decision {
+                let mut result = match decision {
                     ApprovalDecision::Deny { reason } => ToolResult {
                         tool_call_id: call.id.clone(),
                         name: call.name.clone(),
@@ -163,6 +173,12 @@ impl Agent {
                         },
                     },
                 };
+                if self.options.max_tool_result_chars > 0
+                    && result.content.len() > self.options.max_tool_result_chars
+                {
+                    result.content.truncate(self.options.max_tool_result_chars);
+                    result.content.push_str("\n…[truncated tool output]");
+                }
 
                 let _ = events
                     .send(AgentEvent::ToolCallFinish {

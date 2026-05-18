@@ -15,7 +15,7 @@ use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use merlion_core::{
-    Error, LlmClient, LlmRequest, LlmStreamEvent, Message, Result, Role, ToolCall,
+    Error, LlmClient, LlmRequest, LlmStreamEvent, Message, Result, Role, ToolCall, Usage,
 };
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use serde::Deserialize;
@@ -184,20 +184,11 @@ impl LlmClient for AnthropicClient {
         let body = self.build_body(&req, true);
         let headers = self.build_headers()?;
 
-        let resp = self
-            .http
-            .post(&url)
-            .headers(headers)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| Error::Llm(format!("request: {e}")))?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_default();
-            return Err(Error::Llm(format!("http {status}: {text}")));
-        }
+        let http = self.http.clone();
+        let resp = crate::retry::send_with_retry(|| {
+            http.post(&url).headers(headers.clone()).json(&body)
+        })
+        .await?;
 
         let stream = anthropic_sse_to_events(resp.bytes_stream()).boxed();
         Ok(stream)
@@ -219,6 +210,8 @@ where
     let mut buf = String::new();
     let mut blocks: Vec<BlockState> = Vec::new();
     let mut tool_calls_out: Vec<ToolCall> = Vec::new();
+    let mut prompt_tokens: Option<u32> = None;
+    let mut completion_tokens: Option<u32> = None;
     let mut finished = false;
 
     async_stream::stream! {
@@ -243,7 +236,16 @@ where
                     };
                     let kind = parsed.get("type").and_then(|t| t.as_str()).unwrap_or("");
                     match kind {
-                        "message_start" | "ping" => {}
+                        "message_start" => {
+                            if let Some(input) = parsed.get("message")
+                                .and_then(|m| m.get("usage"))
+                                .and_then(|u| u.get("input_tokens"))
+                                .and_then(|v| v.as_u64())
+                            {
+                                prompt_tokens = Some(input as u32);
+                            }
+                        }
+                        "ping" => {}
                         "content_block_start" => {
                             let index = parsed.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
                             let block = parsed.get("content_block").cloned().unwrap_or(Value::Null);
@@ -293,6 +295,12 @@ where
                             }
                         }
                         "message_delta" => {
+                            if let Some(out) = parsed.get("usage")
+                                .and_then(|u| u.get("output_tokens"))
+                                .and_then(|v| v.as_u64())
+                            {
+                                completion_tokens = Some(out as u32);
+                            }
                             if let Some(stop) = parsed.get("delta")
                                 .and_then(|d| d.get("stop_reason"))
                                 .and_then(|s| s.as_str())
@@ -300,6 +308,17 @@ where
                                 if !tool_calls_out.is_empty() {
                                     let calls = std::mem::take(&mut tool_calls_out);
                                     yield Ok(LlmStreamEvent::ToolCalls(calls));
+                                }
+                                if prompt_tokens.is_some() || completion_tokens.is_some() {
+                                    let total = match (prompt_tokens, completion_tokens) {
+                                        (Some(p), Some(c)) => Some(p + c),
+                                        _ => None,
+                                    };
+                                    yield Ok(LlmStreamEvent::Usage(Usage {
+                                        prompt_tokens,
+                                        completion_tokens,
+                                        total_tokens: total,
+                                    }));
                                 }
                                 yield Ok(LlmStreamEvent::Done(Some(stop.to_string())));
                                 finished = true;

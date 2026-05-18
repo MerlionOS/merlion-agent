@@ -20,6 +20,8 @@ merlion-session.workspace = true
 merlion-memory.workspace = true
 merlion-skills.workspace = true
 merlion-mcp.workspace = true
+merlion-gateway.workspace = true
+merlion-cron.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 tokio = { workspace = true, features = ["full"] }
@@ -32,3 +34,5 @@ chrono.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
 futures.workspace = true
+ratatui = "0.28"
+crossterm = { version = "0.28", features = ["event-stream"] }

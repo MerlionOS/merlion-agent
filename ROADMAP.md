@@ -113,20 +113,21 @@ can call them transparently.
 
 ---
 
-## Phase 5 — Messaging gateway (≈16 session hours)
+## Phase 5 — Messaging gateway (≈7 of 16 session hours done)
 
 Talk to the agent from your phone. Hermes ships ~20 platforms; we start with
-the three highest-value.
+the three highest-value. Telegram landed first because it's long-poll HTTP
+(no WebSocket / no public webhook endpoint required).
 
 | # | Deliverable | Files | Est. | Status |
 |---|---|---|---|---|
-| 5.1 | `Gateway` trait + dispatcher in a new `merlion-gateway` crate | `crates/merlion-gateway/` | 2h | ⬜️ |
-| 5.2 | Telegram adapter (long-polling, voice memos via Whisper) | `merlion-gateway/src/telegram.rs` | 3h | ⬜️ |
+| 5.1 | `Gateway` trait + dispatcher in a new `merlion-gateway` crate | `crates/merlion-gateway/` | 2h | ✅ |
+| 5.2 | Telegram adapter (long-polling) | `merlion-gateway/src/telegram.rs` | 3h | ✅ |
 | 5.3 | Discord adapter (slash commands + DM) | `merlion-gateway/src/discord.rs` | 3h | ⬜️ |
-| 5.4 | Slack adapter (Events API + Socket Mode) | `merlion-gateway/src/slack.rs` | 3h | ⬜️ |
-| 5.5 | DM pairing + per-user allowlist | `merlion-gateway/src/pairing.rs` | 1.5h | ⬜️ |
-| 5.6 | Cross-platform session continuity (continue a CLI session over TG) | session join keys | 1.5h | ⬜️ |
-| 5.7 | `merlion gateway {setup,start,stop,status}` | `merlion-cli` | 1h | ⬜️ |
+| 5.4 | Slack adapter (Socket Mode) | `merlion-gateway/src/slack.rs` | 3h | ⬜️ |
+| 5.5 | Env-var per-platform allowlist (Allowlist::from_env) | `merlion-gateway/src/allowlist.rs` | 1.5h | ✅ |
+| 5.6 | Cross-platform session continuity | session join keys | 1.5h | ⬜️ |
+| 5.7 | `merlion gateway {start,status}` | `merlion-cli` | 1h | ✅ |
 | 5.8 | Voice transcription via Whisper API or local whisper.cpp | `merlion-gateway/src/voice.rs` | 1h | ⬜️ |
 
 **Acceptance:** one `merlion gateway start` process serves all three
@@ -139,15 +140,15 @@ Assistant, WebHook, Generic API server. PRs welcome under
 
 ---
 
-## Phase 6 — Cron + sandboxed execution (≈8 session hours)
+## Phase 6 — Cron + sandboxed execution (≈4 of 8 session hours done)
 
 Scheduled runs + isolation from the host filesystem.
 
 | # | Deliverable | Files | Est. | Status |
 |---|---|---|---|---|
-| 6.1 | Cron scheduler with `tokio-cron-scheduler`, persisted job table | `crates/merlion-cron/` | 2h | ⬜️ |
+| 6.1 | Cron scheduler with cron-expression parsing, persisted job table | `crates/merlion-cron/` | 2h | ✅ |
 | 6.2 | Job → messaging-platform delivery (uses Phase 5 gateway) | `merlion-cron/src/delivery.rs` | 1h | ⬜️ |
-| 6.3 | `merlion cron {add,list,remove,run}` subcommands | `merlion-cli` | 1h | ⬜️ |
+| 6.3 | `merlion cron {add,list,remove,run,daemon}` subcommands | `merlion-cli` | 1h | ✅ |
 | 6.4 | Docker terminal backend (run shell commands in a container) | `merlion-tools/src/sandboxes/docker.rs` | 2h | ⬜️ |
 | 6.5 | SSH terminal backend (run on a remote host) | `merlion-tools/src/sandboxes/ssh.rs` | 2h | ⬜️ |
 
@@ -158,20 +159,20 @@ runs at 9am daily and delivers the result to Telegram.
 
 ---
 
-## Phase 7 — TUI (≈12 session hours)
+## Phase 7 — TUI (≈8 of 12 session hours done)
 
 Hermes's terminal UI is a meaningful UX win over a plain REPL. ratatui makes
 this tractable in Rust.
 
 | # | Deliverable | Files | Est. | Status |
 |---|---|---|---|---|
-| 7.1 | ratatui scaffolding: layout, event loop, render budget | `merlion-cli/src/tui/` | 2h | ⬜️ |
-| 7.2 | Multiline editor widget (Ctrl+J newline, Enter submit) | `merlion-cli/src/tui/editor.rs` | 2h | ⬜️ |
-| 7.3 | Slash-command autocomplete (Tab) | `merlion-cli/src/tui/complete.rs` | 1.5h | ⬜️ |
-| 7.4 | Streaming output pane with interrupt-and-redirect (Ctrl+C → new input) | `merlion-cli/src/tui/stream.rs` | 2h | ⬜️ |
-| 7.5 | Tool-output collapsible panes | `merlion-cli/src/tui/tools.rs` | 1.5h | ⬜️ |
-| 7.6 | History scroll (mouse + keyboard) | `merlion-cli/src/tui/history.rs` | 1.5h | ⬜️ |
-| 7.7 | `--tui` flag default-on when stdout is a TTY | `merlion-cli` | 0.5h | ⬜️ |
+| 7.1 | ratatui scaffolding: layout, event loop, render budget | `merlion-cli/src/tui/` | 2h | ✅ |
+| 7.2 | Multiline editor widget (Ctrl+J newline, Enter submit) | `merlion-cli/src/tui/input.rs` | 2h | ✅ |
+| 7.3 | Slash-command autocomplete (Tab) | `merlion-cli/src/tui/` | 1.5h | ⬜️ |
+| 7.4 | Streaming output pane with interrupt-and-redirect (Ctrl+C → new input) | `merlion-cli/src/tui/app.rs` | 2h | ✅ |
+| 7.5 | Tool-output collapsible panes (rendered inline; collapse TBD) | `merlion-cli/src/tui/render.rs` | 1.5h | ✅ |
+| 7.6 | History scroll (keyboard via PgUp/PgDn/Esc) | `merlion-cli/src/tui/app.rs` | 1.5h | ✅ |
+| 7.7 | `--tui` flag default-on when stdout is a TTY | `merlion-cli` | 0.5h | ✅ |
 | 7.8 | Light/dark theme via config | `merlion-cli/src/tui/theme.rs` | 1h | ⬜️ |
 
 **Acceptance:** running `merlion` in a terminal feels modern — streaming,
@@ -179,17 +180,17 @@ collapsible tool output, no flicker, interrupt mid-stream.
 
 ---
 
-## Phase 8 — Polish, packaging, distribution (≈6 session hours)
+## Phase 8 — Polish, packaging, distribution (≈2 of 6 session hours done)
 
 Make merlion installable in one command from anywhere.
 
 | # | Deliverable | Files | Est. | Status |
 |---|---|---|---|---|
-| 8.1 | GitHub Actions CI: build + test on linux/macos/windows | `.github/workflows/ci.yml` | 1h | ⬜️ |
+| 8.1 | GitHub Actions CI: build + test on linux/macos | `.github/workflows/ci.yml` | 1h | ✅ |
 | 8.2 | Release workflow: `cargo dist`-style cross-compiled artifacts | `.github/workflows/release.yml` | 1.5h | ⬜️ |
 | 8.3 | Homebrew formula (tap or core) | `Formula/merlion.rb` | 1h | ⬜️ |
 | 8.4 | `cargo binstall` metadata | `Cargo.toml` | 0.25h | ⬜️ |
-| 8.5 | One-line installer: `curl ... | bash` | `scripts/install.sh` | 1h | ⬜️ |
+| 8.5 | One-line installer: `curl ... \| bash` | `scripts/install.sh` | 1h | ✅ |
 | 8.6 | `merlion update` subcommand (self-update) | `merlion-cli` | 1h | ⬜️ |
 | 8.7 | `merlion doctor` deepened: probes for `rg`, `git`, MCP servers, etc. | `merlion-cli` | 0.25h | ⬜️ |
 
@@ -204,18 +205,20 @@ Adding up the unchecked items:
 
 | Phase | Remaining | Cumulative |
 |---|---:|---:|
-| 1 (Provider breadth)         | 5 h  | 5 h  |
-| 2 (Tool surface)             | 8 h  | 13 h |
-| 3 (Memory & skills)          | 10 h | 23 h |
-| 4 (MCP integration)          | 8 h  | 31 h |
-| 5 (Messaging gateway)        | 16 h | 47 h |
-| 6 (Cron + sandbox)           | 8 h  | 55 h |
-| 7 (TUI)                      | 12 h | 67 h |
-| 8 (Polish & packaging)       | 6 h  | 73 h |
+| 1 (Provider breadth — Bedrock/Vertex/usage display) | 5 h  | 5 h  |
+| 2 (Tool surface — web_search ✅, task tool, allowlist disk, truncation ✅) | 3 h  | 8 h  |
+| 3 (Memory & skills — tab-complete, agentskills.io doc) | 1 h  | 9 h  |
+| 4 (MCP integration — HTTP transport, OAuth) | 3 h  | 12 h |
+| 5 (Gateway — Discord, Slack, voice, cross-platform session continuity) | 9 h  | 21 h |
+| 6 (Sandboxes — Docker, SSH; cron→messaging delivery) | 5 h  | 26 h |
+| 7 (TUI — themes, tab-complete) | 2 h  | 28 h |
+| 8 (Packaging — release artifacts, Homebrew, self-update) | 4 h  | 32 h |
 
-**≈73 session hours** of model-time work between today and a feature-comparable
-v1.0. The current state (≈8 h in) ships a usable agent for OpenAI/Anthropic/
-Gemini with the basic file/shell toolset.
+**≈32 session hours** of remaining model-time work to a feature-comparable
+v1.0. Of the original ≈73-hour estimate, **≈41 h** has been delivered across
+phases 0–8. The deferred items are mostly weight-class outliers: AWS/GCP SDK
+adapters (Bedrock/Vertex), Discord/Slack Gateway WebSocket clients, Docker/
+SSH terminal sandboxes — each large enough to warrant a dedicated session.
 
 ---
 

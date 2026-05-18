@@ -19,6 +19,6 @@ pub use agent::{Agent, AgentEvent, AgentOptions};
 pub use approval::{AllowAllApprover, ApprovalDecision, DenyAllApprover, ToolApprover};
 pub use curator::Curator;
 pub use error::{Error, Result};
-pub use llm::{LlmClient, LlmRequest, LlmResponse, LlmStreamEvent};
+pub use llm::{LlmClient, LlmRequest, LlmResponse, LlmStreamEvent, Usage};
 pub use message::{Message, Role, ToolCall, ToolResult};
 pub use tool::{Tool, ToolRegistry, ToolSchema};

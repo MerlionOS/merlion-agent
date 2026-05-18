@@ -1,0 +1,23 @@
+[package]
+name = "merlion-cron"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Scheduled-job manager for Merlion Agent"
+
+[dependencies]
+merlion-core.workspace = true
+merlion-config.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+tokio = { workspace = true, features = ["time", "sync", "macros", "rt-multi-thread"] }
+async-trait.workspace = true
+tracing.workspace = true
+dirs.workspace = true
+cron = "0.12"
+uuid.workspace = true
