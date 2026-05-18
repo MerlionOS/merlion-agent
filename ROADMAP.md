@@ -23,7 +23,7 @@ coding agent spends building it, not human-pace estimates.
 ## Phase 1 — Provider breadth (≈4–6 session hours)
 
 - [x] Anthropic native adapter (`/v1/messages`) — `anthropic:` provider
-- [ ] Gemini native adapter (`generateContent`)
+- [x] Gemini native adapter (`streamGenerateContent`) — `gemini:` provider
 - [ ] Bedrock + Vertex passthroughs
 - [ ] Usage / cost accounting per response
 - [ ] Retry with backoff on 429 / 5xx (already partly handled by reqwest)

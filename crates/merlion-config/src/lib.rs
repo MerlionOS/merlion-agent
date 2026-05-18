@@ -66,6 +66,8 @@ pub enum Wire {
     OpenAi,
     /// `POST /messages` with `x-api-key: <key>` and `anthropic-version` header.
     Anthropic,
+    /// `POST /models/<m>:streamGenerateContent?alt=sse` with `x-goog-api-key: <key>`.
+    Gemini,
 }
 
 pub struct ResolvedProvider {
@@ -92,10 +94,11 @@ impl Config {
             "groq" => ("https://api.groq.com/openai/v1", "GROQ_API_KEY", Wire::OpenAi),
             "deepseek" => ("https://api.deepseek.com/v1", "DEEPSEEK_API_KEY", Wire::OpenAi),
             "anthropic" => ("https://api.anthropic.com/v1", "ANTHROPIC_API_KEY", Wire::Anthropic),
+            "gemini" => ("https://generativelanguage.googleapis.com/v1beta", "GEMINI_API_KEY", Wire::Gemini),
             other => {
                 anyhow::bail!(
                     "unknown provider `{other}`. Set `model.base_url` and `model.api_key_env` explicitly, \
-                     or use one of: openai, openrouter, nous, novita, moonshot, minimax, zai, groq, deepseek, anthropic."
+                     or use one of: openai, openrouter, nous, novita, moonshot, minimax, zai, groq, deepseek, anthropic, gemini."
                 );
             }
         };

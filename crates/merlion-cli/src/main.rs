@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use merlion_config::{Config, Wire};
 use merlion_core::{Agent, AgentEvent, AgentOptions, LlmClient, Message, ToolRegistry};
-use merlion_llm::{AnthropicClient, OpenAiClient};
+use merlion_llm::{AnthropicClient, GeminiClient, OpenAiClient};
 use merlion_session::SessionDB;
 use tokio::sync::mpsc;
 use tracing_subscriber::EnvFilter;
@@ -161,6 +161,7 @@ async fn chat(cfg: Config, resume: Option<String>) -> Result<()> {
     let client: Arc<dyn LlmClient> = match provider.wire {
         Wire::OpenAi => Arc::new(OpenAiClient::new(provider.base_url.clone(), api_key)?),
         Wire::Anthropic => Arc::new(AnthropicClient::new(provider.base_url.clone(), api_key)?),
+        Wire::Gemini => Arc::new(GeminiClient::new(provider.base_url.clone(), api_key)?),
     };
 
     let mut tools = ToolRegistry::new();

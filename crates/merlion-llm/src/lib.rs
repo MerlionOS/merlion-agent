@@ -7,9 +7,14 @@
 //! - [`AnthropicClient`] speaks Anthropic's native `/v1/messages` API with
 //!   `x-api-key` auth, top-level `system`, and tool_use/tool_result content
 //!   blocks.
+//! - [`GeminiClient`] speaks Google's `models/<m>:streamGenerateContent`
+//!   with `x-goog-api-key` auth, `system_instruction`, and
+//!   `functionCall`/`functionResponse` parts.
 
 pub mod anthropic;
+pub mod gemini;
 pub mod openai;
 
 pub use anthropic::AnthropicClient;
+pub use gemini::GeminiClient;
 pub use openai::OpenAiClient;

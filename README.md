@@ -23,12 +23,12 @@ What works today:
 - Tools: `bash`, `read`, `write`, `edit`, `ls`
 - Providers: OpenAI, OpenRouter, Nous Portal, NovitaAI, Moonshot, MiniMax,
   z.ai/GLM, Groq, DeepSeek (all via `POST /chat/completions`), plus
-  **Anthropic** (`POST /v1/messages`, native).
+  **Anthropic** (`POST /v1/messages`, native) and **Gemini**
+  (`POST /models/<m>:streamGenerateContent`, native).
 - Persistent sessions in `~/.merlion/sessions.db` with FTS5 full-text search.
 
 What's coming (see [ROADMAP.md](ROADMAP.md)):
 
-- Gemini native adapter
 - MCP integration
 - Skills system
 - Messaging gateway (Telegram / Discord / Slack first)
@@ -99,6 +99,7 @@ Environment overrides: `MERLION_MODEL`, `MERLION_BASE_URL`, `MERLION_API_KEY_ENV
 | `groq`       | `https://api.groq.com/openai/v1`                | `GROQ_API_KEY`      |
 | `deepseek`   | `https://api.deepseek.com/v1`                   | `DEEPSEEK_API_KEY`  |
 | `anthropic`  | `https://api.anthropic.com/v1`                  | `ANTHROPIC_API_KEY` |
+| `gemini`     | `https://generativelanguage.googleapis.com/v1beta` | `GEMINI_API_KEY` |
 
 For anything else, set `model.base_url` and `model.api_key_env` explicitly.
 
