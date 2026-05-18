@@ -4,11 +4,13 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use merlion_config::{Config, Wire};
-use merlion_core::{Agent, AgentEvent, AgentOptions, LlmClient, Message, ToolRegistry};
+use merlion_core::{Agent, AgentEvent, AgentOptions, LlmClient, Message, ToolApprover, ToolRegistry};
 use merlion_llm::{AnthropicClient, GeminiClient, OpenAiClient};
 use merlion_session::SessionDB;
 use tokio::sync::mpsc;
 use tracing_subscriber::EnvFilter;
+
+mod approver;
 
 #[derive(Debug, Parser)]
 #[command(name = "merlion", version, about = "Merlion Agent — Rust port of hermes-agent")]
@@ -173,7 +175,8 @@ async fn chat(cfg: Config, resume: Option<String>) -> Result<()> {
     options.max_tokens = cfg.model.max_tokens;
     options.max_iterations = cfg.max_iterations;
 
-    let agent = Agent::new(client, tools, options);
+    let approver: Arc<dyn ToolApprover> = Arc::new(approver::ConsoleApprover::new());
+    let agent = Agent::new(client, tools, options).with_approver(approver);
 
     let db = SessionDB::open_default()?;
     let session_id = match resume {

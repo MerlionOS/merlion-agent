@@ -3,9 +3,10 @@ use std::sync::Arc;
 use futures::StreamExt;
 use tokio::sync::mpsc;
 
+use crate::approval::{AllowAllApprover, ApprovalDecision, ToolApprover};
 use crate::error::{Error, Result};
 use crate::llm::{LlmClient, LlmRequest, LlmStreamEvent};
-use crate::message::{Message, Role, ToolCall};
+use crate::message::{Message, Role, ToolCall, ToolResult};
 use crate::tool::ToolRegistry;
 
 #[derive(Debug, Clone)]
@@ -48,11 +49,20 @@ pub struct Agent {
     llm: Arc<dyn LlmClient>,
     tools: ToolRegistry,
     options: AgentOptions,
+    approver: Arc<dyn ToolApprover>,
 }
 
 impl Agent {
     pub fn new(llm: Arc<dyn LlmClient>, tools: ToolRegistry, options: AgentOptions) -> Self {
-        Self { llm, tools, options }
+        Self { llm, tools, options, approver: Arc::new(AllowAllApprover) }
+    }
+
+    /// Install a tool approver. Defaults to [`AllowAllApprover`] — replace
+    /// with a real implementation (e.g. the CLI's console prompter) to gate
+    /// sensitive tools.
+    pub fn with_approver(mut self, approver: Arc<dyn ToolApprover>) -> Self {
+        self.approver = approver;
+        self
     }
 
     pub fn options(&self) -> &AgentOptions {
@@ -124,6 +134,10 @@ impl Agent {
             }
 
             for call in tool_calls {
+                let decision = self.approver.approve(&call.name, &call.arguments).await;
+
+                // Emit Start *after* approval so the CLI's render output and
+                // the approver's stdin prompt don't fight for the terminal.
                 let _ = events
                     .send(AgentEvent::ToolCallStart {
                         id: call.id.clone(),
@@ -132,13 +146,21 @@ impl Agent {
                     })
                     .await;
 
-                let result = match self.tools.get(&call.name) {
-                    Ok(tool) => tool.call(&call.id, call.arguments.clone()).await,
-                    Err(e) => crate::message::ToolResult {
+                let result = match decision {
+                    ApprovalDecision::Deny { reason } => ToolResult {
                         tool_call_id: call.id.clone(),
                         name: call.name.clone(),
-                        content: format!("error: {e}"),
+                        content: format!("tool rejected by user: {reason}"),
                         is_error: true,
+                    },
+                    ApprovalDecision::Allow => match self.tools.get(&call.name) {
+                        Ok(tool) => tool.call(&call.id, call.arguments.clone()).await,
+                        Err(e) => ToolResult {
+                            tool_call_id: call.id.clone(),
+                            name: call.name.clone(),
+                            content: format!("error: {e}"),
+                            is_error: true,
+                        },
                     },
                 };
 

@@ -20,7 +20,9 @@ What works today:
 - `merlion model <id>` to switch providers
 - `merlion config show` / `config path`
 - `merlion doctor`
-- Tools: `bash`, `read`, `write`, `edit`, `ls`
+- Tools: `bash`, `read`, `write`, `edit`, `ls`, `grep`, `glob`, `web_fetch`
+- Tool approval gate for sensitive tools (bash / write / edit / web_fetch) —
+  prompts y/N/always; bypass with `MERLION_AUTO_APPROVE=1`
 - Providers: OpenAI, OpenRouter, Nous Portal, NovitaAI, Moonshot, MiniMax,
   z.ai/GLM, Groq, DeepSeek (all via `POST /chat/completions`), plus
   **Anthropic** (`POST /v1/messages`, native) and **Gemini**

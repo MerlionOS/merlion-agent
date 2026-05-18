@@ -16,3 +16,8 @@ tokio = { workspace = true, features = ["process", "io-util", "fs", "time", "mac
 async-trait.workspace = true
 tracing.workspace = true
 shell-escape.workspace = true
+glob = "0.3"
+reqwest = { workspace = true, features = ["json", "stream"] }
+html2text = "0.12"
+bytes = "1.7"
+futures.workspace = true

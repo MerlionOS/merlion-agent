@@ -8,12 +8,14 @@
 //! tools behind [`Tool`].
 
 pub mod agent;
+pub mod approval;
 pub mod error;
 pub mod llm;
 pub mod message;
 pub mod tool;
 
 pub use agent::{Agent, AgentEvent, AgentOptions};
+pub use approval::{AllowAllApprover, ApprovalDecision, DenyAllApprover, ToolApprover};
 pub use error::{Error, Result};
 pub use llm::{LlmClient, LlmRequest, LlmResponse, LlmStreamEvent};
 pub use message::{Message, Role, ToolCall, ToolResult};

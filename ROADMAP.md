@@ -55,12 +55,12 @@ agent actually complete coding tasks autonomously.
 
 | # | Deliverable | Files | Est. | Status |
 |---|---|---|---|---|
-| 2.1 | `grep` (ripgrep-backed, POSIX `grep -rn` fallback) | `merlion-tools/src/grep.rs` | 1h | 🟡 |
-| 2.2 | `glob` (uses the `glob` crate, capped results) | `merlion-tools/src/glob.rs` | 0.5h | 🟡 |
-| 2.3 | `web_fetch` (reqwest + html2text, 256 KiB cap) | `merlion-tools/src/web_fetch.rs` | 1h | 🟡 |
+| 2.1 | `grep` (ripgrep-backed, POSIX `grep -rn` fallback) | `merlion-tools/src/grep.rs` | 1h | ✅ |
+| 2.2 | `glob` (uses the `glob` crate, capped results) | `merlion-tools/src/glob.rs` | 0.5h | ✅ |
+| 2.3 | `web_fetch` (reqwest + html2text, 256 KiB cap) | `merlion-tools/src/web_fetch.rs` | 1h | ✅ |
 | 2.4 | `web_search` pluggable backend (Brave / Tavily / SerpAPI) | `merlion-tools/src/web_search.rs` | 1.5h | ⬜️ |
 | 2.5 | `task` — spawn a subagent with isolated message list + tools | `merlion-tools/src/task.rs` | 2h | ⬜️ |
-| 2.6 | `ToolApprover` trait in core; CLI implements console prompter | `merlion-core/src/tool.rs`, CLI | 1h | 🟡 |
+| 2.6 | `ToolApprover` trait in core; CLI implements console prompter | `merlion-core/src/approval.rs`, `merlion-cli/src/approver.rs` | 1h | ✅ |
 | 2.7 | Command-pattern allowlist persisted to `~/.merlion/approvals.yaml` | `merlion-config` | 0.5h | ⬜️ |
 | 2.8 | Tool-result truncation + overflow to `~/.merlion/tool_results/<id>` | `merlion-tools/src/storage.rs` | 0.5h | ⬜️ |
 
