@@ -55,6 +55,13 @@ pub enum TransportSpec {
         url: String,
         #[serde(default)]
         bearer_env: Option<String>,
+        /// Pre-registered OAuth2 client_id used when the server doesn't
+        /// support dynamic client registration. When set, `merlion mcp
+        /// oauth <name>` will run the PKCE flow and store the resulting
+        /// access_token in `~/.merlion/mcp-tokens.yaml`; the HTTP
+        /// transport will then prefer that stored token over `bearer_env`.
+        #[serde(default)]
+        oauth_client_id: Option<String>,
     },
 }
 
@@ -120,7 +127,11 @@ impl ServerEntry {
 
     pub fn http(url: impl Into<String>) -> Self {
         Self {
-            transport: TransportSpec::Http { url: url.into(), bearer_env: None },
+            transport: TransportSpec::Http {
+                url: url.into(),
+                bearer_env: None,
+                oauth_client_id: None,
+            },
             enabled: true,
         }
     }

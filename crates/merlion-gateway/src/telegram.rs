@@ -13,6 +13,9 @@ use crate::{Error, Result};
 
 const DEFAULT_BASE_URL: &str = "https://api.telegram.org";
 const LONG_POLL_SECS: u64 = 30;
+const WHISPER_URL: &str = "https://api.openai.com/v1/audio/transcriptions";
+const TRANSCRIBE_TIMEOUT_SECS: u64 = 60;
+const VOICE_PREFIX: &str = "[voice 🎙️] ";
 
 pub struct TelegramGateway {
     token: String,
@@ -129,18 +132,79 @@ impl TelegramGateway {
                 if next_offset > offset {
                     offset = next_offset;
                 }
-                match message_from_update(update) {
-                    Some(msg) => {
-                        if incoming_tx.send(msg).await.is_err() {
-                            return Ok(());
-                        }
-                    }
-                    None => {
-                        // logged inside message_from_update
+                let maybe_msg = match self.message_or_voice(update).await {
+                    Some(m) => Some(m),
+                    None => None,
+                };
+                if let Some(msg) = maybe_msg {
+                    if incoming_tx.send(msg).await.is_err() {
+                        return Ok(());
                     }
                 }
             }
         }
+    }
+
+    /// Convert a Telegram update into an `IncomingMessage`. Handles both
+    /// plain text and voice messages — for the latter, runs the Whisper
+    /// transcription pipeline (with a 60s timeout). On any voice failure
+    /// or missing `OPENAI_API_KEY`, logs and returns `None`.
+    async fn message_or_voice(&self, u: TgUpdate) -> Option<IncomingMessage> {
+        let message = u.message.as_ref();
+        if let Some(m) = message {
+            if m.text.is_none() && m.voice.is_some() {
+                let voice = m.voice.as_ref().unwrap();
+                let from = match m.from.as_ref() {
+                    Some(f) => f,
+                    None => {
+                        warn!(
+                            message_id = m.message_id,
+                            "telegram voice message has no `from`; skipping"
+                        );
+                        return None;
+                    }
+                };
+
+                let transcript_fut = transcribe_voice(&self.http, &self.token, voice);
+                let transcript = match tokio::time::timeout(
+                    Duration::from_secs(TRANSCRIBE_TIMEOUT_SECS),
+                    transcript_fut,
+                )
+                .await
+                {
+                    Ok(Ok(t)) => t,
+                    Ok(Err(e)) => {
+                        warn!(
+                            error = %e,
+                            message_id = m.message_id,
+                            "telegram voice transcription failed; skipping"
+                        );
+                        return None;
+                    }
+                    Err(_) => {
+                        warn!(
+                            message_id = m.message_id,
+                            "telegram voice transcription timed out; skipping"
+                        );
+                        return None;
+                    }
+                };
+
+                let display_name = display_name_for(from);
+                let text = format!("{VOICE_PREFIX}{transcript}");
+                return Some(IncomingMessage {
+                    user: User {
+                        platform: "telegram".into(),
+                        id: from.id.to_string(),
+                        display_name,
+                    },
+                    conversation_id: m.chat.id.to_string(),
+                    message_id: m.message_id.to_string(),
+                    text,
+                });
+            }
+        }
+        message_from_update(u)
     }
 
     async fn send_loop(&self, mut outgoing_rx: mpsc::Receiver<OutgoingMessage>) -> Result<()> {
@@ -224,12 +288,7 @@ pub fn message_from_update(u: TgUpdate) -> Option<IncomingMessage> {
         }
     };
 
-    let display_name = match (&from.first_name, &from.last_name) {
-        (Some(first), Some(last)) => format!("{first} {last}"),
-        (Some(first), None) => first.clone(),
-        (None, Some(last)) => last.clone(),
-        (None, None) => from.username.clone().unwrap_or_else(|| from.id.to_string()),
-    };
+    let display_name = display_name_for(&from);
 
     Some(IncomingMessage {
         user: User {
@@ -241,6 +300,100 @@ pub fn message_from_update(u: TgUpdate) -> Option<IncomingMessage> {
         message_id: m.message_id.to_string(),
         text,
     })
+}
+
+fn display_name_for(from: &TgUser) -> String {
+    match (&from.first_name, &from.last_name) {
+        (Some(first), Some(last)) => format!("{first} {last}"),
+        (Some(first), None) => first.clone(),
+        (None, Some(last)) => last.clone(),
+        (None, None) => from.username.clone().unwrap_or_else(|| from.id.to_string()),
+    }
+}
+
+/// Download a Telegram voice file and POST it to OpenAI Whisper, returning
+/// the transcript. Returns `Err` if `OPENAI_API_KEY` is unset, any HTTP
+/// step fails, or the responses don't deserialize.
+pub async fn transcribe_voice(
+    http: &reqwest::Client,
+    token: &str,
+    voice: &TgVoice,
+) -> Result<String> {
+    let openai_key = std::env::var("OPENAI_API_KEY")
+        .map_err(|_| Error::Other("OPENAI_API_KEY env var not set".into()))?;
+
+    let get_file_url = format!("https://api.telegram.org/bot{token}/getFile");
+    let file_resp: TgGetFileResponse = http
+        .get(&get_file_url)
+        .query(&[("file_id", voice.file_id.as_str())])
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    if !file_resp.ok {
+        return Err(Error::Other(format!(
+            "telegram getFile ok=false: {:?}",
+            file_resp.description
+        )));
+    }
+    let file_path = file_resp
+        .result
+        .ok_or_else(|| Error::Other("telegram getFile missing result".into()))?
+        .file_path
+        .ok_or_else(|| Error::Other("telegram getFile missing file_path".into()))?;
+
+    let download_url = format!("https://api.telegram.org/file/bot{token}/{file_path}");
+    let bytes = http
+        .get(&download_url)
+        .send()
+        .await?
+        .error_for_status()?
+        .bytes()
+        .await?;
+
+    let mime = voice
+        .mime_type
+        .clone()
+        .unwrap_or_else(|| "audio/ogg".to_string());
+    let part = reqwest::multipart::Part::bytes(bytes.to_vec())
+        .file_name("voice.ogg")
+        .mime_str(&mime)
+        .map_err(Error::Reqwest)?;
+    let form = reqwest::multipart::Form::new()
+        .text("model", "whisper-1")
+        .part("file", part);
+
+    let whisper_resp: WhisperResponse = http
+        .post(WHISPER_URL)
+        .bearer_auth(openai_key)
+        .multipart(form)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    Ok(whisper_resp.text)
+}
+
+#[derive(Debug, Deserialize)]
+struct TgGetFileResponse {
+    ok: bool,
+    #[serde(default)]
+    result: Option<TgFileInfo>,
+    #[serde(default)]
+    description: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TgFileInfo {
+    #[serde(default)]
+    file_path: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WhisperResponse {
+    text: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -267,6 +420,17 @@ pub struct TgMessage {
     pub chat: TgChat,
     #[serde(default)]
     pub text: Option<String>,
+    #[serde(default)]
+    pub voice: Option<TgVoice>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TgVoice {
+    pub file_id: String,
+    #[serde(default)]
+    pub duration: Option<u32>,
+    #[serde(default)]
+    pub mime_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

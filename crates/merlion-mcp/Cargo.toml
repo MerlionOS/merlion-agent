@@ -20,3 +20,7 @@ dirs.workspace = true
 futures.workspace = true
 reqwest.workspace = true
 async-stream = "0.3"
+sha2 = "0.10"
+base64 = "0.22"
+rand = "0.8"
+urlencoding = "2.1"

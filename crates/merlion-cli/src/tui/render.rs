@@ -45,8 +45,19 @@ fn draw_status(f: &mut Frame, area: Rect, app: &App) {
     } else {
         Style::default().add_modifier(Modifier::DIM)
     };
-    let line = Line::from(vec![Span::styled(format!("· {}", app.status), style)]);
-    f.render_widget(Paragraph::new(line), area);
+    let dim = Style::default().add_modifier(Modifier::DIM);
+    let mut spans = vec![Span::styled(format!("· {}", app.status), style)];
+    let usage = &app.usage;
+    if usage.prompt_tokens.is_some()
+        || usage.completion_tokens.is_some()
+        || usage.total_tokens.is_some()
+    {
+        let p = usage.prompt_tokens.unwrap_or(0);
+        let c = usage.completion_tokens.unwrap_or(0);
+        let t = usage.total_tokens.unwrap_or(p + c);
+        spans.push(Span::styled(format!("   · tokens: {p} in / {c} out / {t} total"), dim));
+    }
+    f.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
 fn draw_conversation(f: &mut Frame, area: Rect, app: &App) {

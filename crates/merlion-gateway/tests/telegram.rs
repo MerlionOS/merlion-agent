@@ -31,6 +31,7 @@ fn message_from_update_extracts_fields() {
             }),
             chat: TgChat { id: -100123 },
             text: Some("hello world".into()),
+            voice: None,
         }),
     };
 
@@ -57,6 +58,7 @@ fn message_from_update_skips_non_text() {
             }),
             chat: TgChat { id: 1 },
             text: None,
+            voice: None,
         }),
     };
     assert!(message_from_update(update).is_none());
@@ -76,10 +78,40 @@ fn message_from_update_first_name_only() {
             }),
             chat: TgChat { id: 2 },
             text: Some("hi".into()),
+            voice: None,
         }),
     };
     let im = message_from_update(update).unwrap();
     assert_eq!(im.user.display_name, "Solo");
+}
+
+#[test]
+fn tg_message_with_voice_and_no_text_deserializes() {
+    let raw = r#"{
+        "message_id": 51,
+        "from": {"id": 7, "first_name": "Vox"},
+        "chat": {"id": 7},
+        "voice": {
+            "file_id": "AwACAgI-voice-id",
+            "duration": 3,
+            "mime_type": "audio/ogg"
+        }
+    }"#;
+
+    let m: TgMessage = serde_json::from_str(raw).expect("voice-only TgMessage should parse");
+    assert!(m.text.is_none());
+    let voice = m.voice.expect("voice field present");
+    assert_eq!(voice.file_id, "AwACAgI-voice-id");
+    assert_eq!(voice.duration, Some(3));
+    assert_eq!(voice.mime_type.as_deref(), Some("audio/ogg"));
+}
+
+#[test]
+fn voice_transcript_prefix_is_prepended() {
+    let transcript = "hello from a voice memo";
+    let prefixed = format!("[voice 🎙️] {transcript}");
+    assert!(prefixed.starts_with("[voice 🎙️] "));
+    assert!(prefixed.ends_with(transcript));
 }
 
 /// Fixture Telegram API server. Serves a canned getUpdates response on the

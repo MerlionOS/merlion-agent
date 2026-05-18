@@ -136,6 +136,14 @@ enum McpAction {
     Disable { name: String },
     /// Connect to a server, run the initialize handshake, list its tools.
     Test { name: String },
+    /// Run the OAuth2 PKCE flow against an HTTP server and cache the token
+    /// in `~/.merlion/mcp-tokens.yaml`.
+    Oauth {
+        name: String,
+        /// Repeatable; defaults to none if omitted.
+        #[arg(long)]
+        scope: Vec<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -366,7 +374,7 @@ async fn mcp_cmd(action: McpAction) -> Result<()> {
                         let argline = args.iter().cloned().collect::<Vec<_>>().join(" ");
                         println!("{status}  {name}\t stdio: {command} {argline}");
                     }
-                    TransportSpec::Http { url, bearer_env } => {
+                    TransportSpec::Http { url, bearer_env, oauth_client_id: _ } => {
                         let auth = bearer_env.as_deref().unwrap_or("(none)");
                         println!("{status}  {name}\t http:  {url} (auth env: {auth})");
                     }
@@ -418,7 +426,7 @@ async fn mcp_cmd(action: McpAction) -> Result<()> {
                 .servers
                 .get(&name)
                 .ok_or_else(|| anyhow::anyhow!("no server named `{name}` (try `merlion mcp list`)"))?;
-            let client = connect_server(entry).await?;
+            let client = connect_server(&name, entry).await?;
             let info = client.initialize().await.context("initialize handshake")?;
             let server_name = info
                 .server_info
@@ -437,6 +445,38 @@ async fn mcp_cmd(action: McpAction) -> Result<()> {
                 }
             }
             let _ = client.close().await;
+        }
+        McpAction::Oauth { name, scope } => {
+            use merlion_mcp::{OauthFlow, TokenStore};
+            let entry = reg.servers.get(&name).ok_or_else(|| {
+                anyhow::anyhow!("no server named `{name}` (try `merlion mcp list`)")
+            })?;
+            let (url, client_id) = match &entry.transport {
+                TransportSpec::Http { url, oauth_client_id, .. } => {
+                    (url.clone(), oauth_client_id.clone())
+                }
+                TransportSpec::Stdio { .. } => {
+                    anyhow::bail!("server `{name}` is stdio — OAuth applies to HTTP transports only");
+                }
+            };
+            let flow = OauthFlow { server_url: url, static_client_id: client_id, scopes: scope };
+            let tokens = flow
+                .authorize()
+                .await
+                .map_err(|e| anyhow::anyhow!("oauth flow: {e}"))?;
+            let store_path = TokenStore::default_path();
+            let mut store = TokenStore::load(&store_path)
+                .map_err(|e| anyhow::anyhow!("load token store: {e}"))?;
+            let expires = tokens.expires_at;
+            store.set(name.clone(), tokens);
+            store
+                .save(&store_path)
+                .map_err(|e| anyhow::anyhow!("save token store: {e}"))?;
+            println!(
+                "saved token for `{name}` to {} (expires_at: {:?})",
+                store_path.display(),
+                expires
+            );
         }
     }
     Ok(())
@@ -460,7 +500,7 @@ async fn autoload_server(
     entry: &ServerEntry,
     tools: &mut ToolRegistry,
 ) -> Result<Arc<McpClient>> {
-    let client = Arc::new(connect_server(entry).await?);
+    let client = Arc::new(connect_server(server_name, entry).await?);
     client
         .initialize()
         .await
@@ -477,8 +517,8 @@ async fn autoload_server(
     Ok(client)
 }
 
-async fn connect_server(entry: &ServerEntry) -> Result<McpClient> {
-    use merlion_mcp::HttpTransport;
+async fn connect_server(server_name: &str, entry: &ServerEntry) -> Result<McpClient> {
+    use merlion_mcp::{HttpTransport, TokenStore};
     let transport: Box<dyn merlion_mcp::Transport> = match &entry.transport {
         TransportSpec::Stdio { command, args, env } => {
             let env_vec: Vec<(String, String)> =
@@ -488,10 +528,14 @@ async fn connect_server(entry: &ServerEntry) -> Result<McpClient> {
                 .map_err(|e| anyhow::anyhow!("spawn `{command}`: {e}"))?;
             Box::new(t)
         }
-        TransportSpec::Http { url, bearer_env } => {
+        TransportSpec::Http { url, bearer_env, oauth_client_id: _ } => {
             let mut t = HttpTransport::new(url.clone())
                 .map_err(|e| anyhow::anyhow!("http transport `{url}`: {e}"))?;
-            if let Some(env_var) = bearer_env.as_deref() {
+            // Prefer a cached OAuth token if one exists for this server.
+            let store = TokenStore::load(&TokenStore::default_path()).ok();
+            if let Some(tok) = store.as_ref().and_then(|s| s.get(server_name)) {
+                t = t.with_bearer(tok.access_token.clone());
+            } else if let Some(env_var) = bearer_env.as_deref() {
                 match std::env::var(env_var) {
                     Ok(tok) => t = t.with_bearer(tok),
                     Err(_) => {
@@ -856,6 +900,7 @@ async fn chat(cfg: Config, resume: Option<String>, want_tui: bool, no_tui: bool)
     merlion_tools::register_defaults(&mut tools);
     merlion_tools::register_memory(&mut tools, memory_store.clone());
     merlion_tools::register_skill_tools(&mut tools, skill_cfg);
+    let task_tool = merlion_tools::register_task_tool(&mut tools);
 
     // Connect to configured MCP servers and inject their tools. Connection
     // failures are logged, not fatal — one broken server shouldn't take down
@@ -879,7 +924,8 @@ async fn chat(cfg: Config, resume: Option<String>, want_tui: bool, no_tui: bool)
     options.max_iterations = cfg.max_iterations;
 
     let approver: Arc<dyn ToolApprover> = Arc::new(approver::ConsoleApprover::new());
-    let agent = Agent::new(client, tools, options).with_approver(approver);
+    let agent = Arc::new(Agent::new(client, tools, options).with_approver(approver));
+    task_tool.install_agent(&agent);
     let mut curator = Curator::default();
 
     let db = SessionDB::open_default()?;

@@ -165,8 +165,14 @@ mod tests {
         assert!(result.content.contains("invalid arguments"));
     }
 
+    /// Process-global mutex for tests that mutate MERLION_DOCKER_BIN.
+    /// Cargo runs tests within a binary in parallel by default, so two
+    /// tests both mutating the same env var collide. Serialize them.
+    static ENV_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[tokio::test]
     async fn docker_binary_missing_returns_clean_error() {
+        let _g = ENV_GUARD.lock().unwrap();
         let tool = BashDocker;
         // SAFETY: tests in this module set env to override the resolved docker
         // binary. Cargo runs `#[tokio::test]` on a multi-thread runtime per
@@ -196,6 +202,7 @@ mod tests {
 
     #[tokio::test]
     async fn fake_docker_script_runs_and_passes_args() {
+        let _g = ENV_GUARD.lock().unwrap();
         // Build a fake "docker" shim that just echoes its args, to verify
         // the call() path end-to-end without needing a real docker engine.
         let dir = std::env::temp_dir().join(format!(

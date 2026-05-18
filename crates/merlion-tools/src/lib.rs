@@ -10,6 +10,7 @@ pub mod ls;
 pub mod memory;
 pub mod read;
 pub mod skill_tools;
+pub mod task;
 pub mod web_fetch;
 pub mod web_search;
 pub mod write;
@@ -50,4 +51,15 @@ pub fn register_skill_tools(reg: &mut ToolRegistry, cfg: Arc<skill_tools::SkillT
 pub fn register_sandbox_bash(reg: &mut ToolRegistry) {
     reg.register(bash_docker::BashDocker::default());
     reg.register(bash_ssh::BashSsh::default());
+}
+
+/// Register the `task` tool, which spawns sub-agents that share this
+/// `Agent`'s tools and LLM but start with fresh context. The returned
+/// handle must be wired up via [`task::TaskTool::install_agent`] **after**
+/// the `Agent` is constructed and wrapped in an `Arc` — otherwise the tool
+/// will return an error on every call.
+pub fn register_task_tool(reg: &mut ToolRegistry) -> Arc<task::TaskTool> {
+    let tool = task::TaskTool::new();
+    reg.register_arc(tool.clone());
+    tool
 }

@@ -14,7 +14,7 @@ use crossterm::terminal::{
 use futures::future::FutureExt;
 use futures::StreamExt;
 use merlion_config::Config;
-use merlion_core::{Agent, AgentEvent, Curator, Message};
+use merlion_core::{Agent, AgentEvent, Curator, Message, Usage};
 use merlion_memory::MemoryStore;
 use merlion_session::SessionDB;
 use merlion_skills::SkillSet;
@@ -60,6 +60,10 @@ pub struct App {
     pub skill_count: usize,
     pub memory_count: usize,
 
+    /// Cumulative token usage across the session (sum of provider-reported
+    /// per-turn usages). Rendered in the status line.
+    pub usage: Usage,
+
     pub should_quit: bool,
 }
 
@@ -86,6 +90,7 @@ impl App {
             session_id_short,
             skill_count,
             memory_count,
+            usage: Usage::default(),
             should_quit: false,
         }
     }
@@ -707,7 +712,9 @@ pub fn handle_agent_event(app: &mut App, ev: AgentEvent) {
             app.status = "idle".into();
             app.pin_to_bottom();
         }
-        AgentEvent::Usage(_) => {}
+        AgentEvent::Usage(u) => {
+            app.usage.merge(&u);
+        }
     }
 }
 
