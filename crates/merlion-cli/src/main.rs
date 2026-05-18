@@ -201,18 +201,91 @@ fn config_cmd(cfg: Config, action: Option<ConfigAction>) -> Result<()> {
 }
 
 fn doctor(cfg: Config) -> Result<()> {
+    use std::process::Command;
+
     println!("merlion-agent {}", env!("CARGO_PKG_VERSION"));
     let home = merlion_config::merlion_home();
-    println!("home:   {}", home.display());
-    println!("model:  {}", cfg.model.id);
+    println!("home:    {}", home.display());
+
+    // Core config
+    println!("\n— config —");
+    println!("model:        {}", cfg.model.id);
     let provider = cfg.resolve_provider()?;
-    println!("base_url: {}", provider.base_url);
-    println!("api key env: {}", provider.api_key_env);
+    println!("base_url:     {}", provider.base_url);
+    println!("api key env:  {}", provider.api_key_env);
     let has_key = std::env::var(&provider.api_key_env).is_ok();
     println!(
-        "api key:   {}",
-        if has_key { "found".to_string() } else { format!("MISSING ({})", provider.api_key_env) }
+        "api key:      {}",
+        if has_key { "found".into() } else { format!("MISSING ({})", provider.api_key_env) }
     );
+
+    // External tools merlion shells out to
+    println!("\n— external tools —");
+    for tool in ["rg", "grep", "git", "bash", "curl"] {
+        let found = Command::new("which").arg(tool).output().ok().filter(|o| o.status.success());
+        match found {
+            Some(o) => {
+                let path = String::from_utf8_lossy(&o.stdout).trim().to_string();
+                println!("{:<6} {}", tool, path);
+            }
+            None => println!("{:<6} MISSING", tool),
+        }
+    }
+
+    // Stores
+    println!("\n— stores —");
+    let session_db = home.join("sessions.db");
+    println!("sessions.db   {}", if session_db.exists() { "ok" } else { "(none yet)" });
+    let mem_dir = home.join("memory");
+    println!("memory/       {}", if mem_dir.exists() { "ok" } else { "(none yet)" });
+    let skills_dir = home.join("skills");
+    let bundled_skills = std::env::current_dir().ok().map(|p| p.join("skills"));
+    println!(
+        "skills/       user={} bundled={}",
+        if skills_dir.exists() { "ok" } else { "none" },
+        bundled_skills.as_ref().filter(|p| p.exists()).map(|_| "ok").unwrap_or("none"),
+    );
+
+    // MCP
+    println!("\n— mcp servers —");
+    match merlion_mcp::McpRegistry::load_default() {
+        Ok(reg) if reg.servers.is_empty() => {
+            println!("(none configured — `merlion mcp add`)");
+        }
+        Ok(reg) => {
+            for (name, entry) in &reg.servers {
+                let status = if entry.enabled { "enabled " } else { "disabled" };
+                println!("{status}  {name}");
+            }
+        }
+        Err(e) => println!("(error loading mcp.yaml: {e})"),
+    }
+
+    // Gateway env
+    println!("\n— gateway —");
+    for (label, var) in [
+        ("Telegram token", "TELEGRAM_BOT_TOKEN"),
+        ("Discord token", "DISCORD_BOT_TOKEN"),
+        ("Slack app token", "SLACK_APP_TOKEN"),
+        ("Slack bot token", "SLACK_BOT_TOKEN"),
+    ] {
+        let set = std::env::var(var).is_ok();
+        println!("{:<18} {}", format!("{label}:"), if set { "set" } else { "MISSING" });
+    }
+
+    // Cron
+    println!("\n— cron —");
+    match merlion_cron::CronRegistry::load_default() {
+        Ok(reg) if reg.jobs.is_empty() => println!("(no jobs scheduled)"),
+        Ok(reg) => {
+            for j in &reg.jobs {
+                let status = if j.enabled { "enabled " } else { "disabled" };
+                println!("{status}  {}  ({})", j.name, j.schedule);
+            }
+        }
+        Err(e) => println!("(error loading cron.yaml: {e})"),
+    }
+
     Ok(())
 }
 
@@ -399,7 +472,7 @@ fn yes_no(b: bool) -> &'static str {
 /// and `SessionDB` (sessions are keyed on `(platform, user_id)` so they
 /// can't collide), but the message-routing channels are per-platform.
 async fn start_gateways(cfg: Config) -> Result<()> {
-    use merlion_gateway::{Allowlist, DiscordGateway, Gateway, TelegramGateway};
+    use merlion_gateway::{Allowlist, DiscordGateway, Gateway, SlackGateway, TelegramGateway};
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
@@ -460,11 +533,24 @@ async fn start_gateways(cfg: Config) -> Result<()> {
             }
         }));
     }
+    if std::env::var("SLACK_APP_TOKEN").is_ok() && std::env::var("SLACK_BOT_TOKEN").is_ok() {
+        let (tx, rx, dispatcher_task) =
+            spawn_dispatcher(&agent, &db, &system_prompt, &allowlist);
+        tasks.push(dispatcher_task);
+        let gw = Arc::new(SlackGateway::from_env()?);
+        let name = gw.name();
+        started.push(name);
+        tasks.push(tokio::spawn(async move {
+            if let Err(e) = gw.run(tx, rx).await {
+                eprintln!("slack gateway exited: {e}");
+            }
+        }));
+    }
 
     if started.is_empty() {
         anyhow::bail!(
-            "no gateway env vars detected. Set TELEGRAM_BOT_TOKEN and/or DISCORD_BOT_TOKEN.\n\
-             See `merlion gateway status`."
+            "no gateway env vars detected. Set TELEGRAM_BOT_TOKEN, DISCORD_BOT_TOKEN, or \
+             SLACK_APP_TOKEN+SLACK_BOT_TOKEN. See `merlion gateway status`."
         );
     }
     println!("gateway started: {}", started.join(", "));
@@ -605,12 +691,69 @@ impl merlion_cron::scheduler::JobRunner for CliJobRunner {
             }
         }
         let _ = task.await;
-        println!(
-            "[cron {}] @ {} → {}",
-            job.name,
-            chrono::Utc::now().to_rfc3339(),
-            reply
-        );
+
+        if reply.trim().is_empty() {
+            reply = "(merlion produced no text reply)".into();
+        }
+        let when = chrono::Utc::now().to_rfc3339();
+
+        match deliver_cron_result(&job.destination, &job.name, &reply).await {
+            Ok(true) => {
+                tracing::info!(job = %job.name, dest = %job.destination, "cron result delivered");
+            }
+            Ok(false) | Err(_) => {
+                // Fall back to stdout if delivery failed or destination is "cli".
+                println!("[cron {}] @ {when} → {reply}", job.name);
+            }
+        }
+    }
+}
+
+/// Push the cron result to its configured destination. Returns Ok(true) if
+/// a non-CLI destination accepted the message, Ok(false) for the "cli"
+/// destination (caller prints to stdout), or Err on transport failure.
+///
+/// Supported destinations:
+/// - `cli` — print to stdout (the default).
+/// - `telegram:<chat_id>` — POST sendMessage with TELEGRAM_BOT_TOKEN.
+/// - `discord:<channel_id>` — POST messages with DISCORD_BOT_TOKEN.
+async fn deliver_cron_result(destination: &str, job_name: &str, reply: &str) -> Result<bool> {
+    let prefix = format!("[cron {job_name}]\n");
+    let body = format!("{prefix}{reply}");
+    if destination == "cli" {
+        return Ok(false);
+    }
+    if let Some(chat_id) = destination.strip_prefix("telegram:") {
+        let token = std::env::var("TELEGRAM_BOT_TOKEN")
+            .context("TELEGRAM_BOT_TOKEN not set; cannot deliver to telegram")?;
+        let url = format!("https://api.telegram.org/bot{token}/sendMessage");
+        let resp = reqwest::Client::new()
+            .post(&url)
+            .json(&serde_json::json!({"chat_id": chat_id, "text": body}))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            anyhow::bail!("telegram sendMessage {}: {}", resp.status(), resp.text().await.unwrap_or_default());
+        }
+        Ok(true)
+    } else if let Some(channel_id) = destination.strip_prefix("discord:") {
+        let token = std::env::var("DISCORD_BOT_TOKEN")
+            .context("DISCORD_BOT_TOKEN not set; cannot deliver to discord")?;
+        let url = format!("https://discord.com/api/v10/channels/{channel_id}/messages");
+        let resp = reqwest::Client::new()
+            .post(&url)
+            .header("Authorization", format!("Bot {token}"))
+            .json(&serde_json::json!({"content": body}))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            anyhow::bail!("discord postMessage {}: {}", resp.status(), resp.text().await.unwrap_or_default());
+        }
+        Ok(true)
+    } else {
+        anyhow::bail!(
+            "unknown cron destination `{destination}` — use `cli`, `telegram:<chat_id>`, or `discord:<channel_id>`"
+        )
     }
 }
 

@@ -36,9 +36,13 @@ What works today:
   server; its tools auto-load into the agent on next chat as
   `mcp_<server>_<tool>`
 - ratatui-based TUI auto-enabled on TTY (override with `--tui` / `--no-tui`)
-- Telegram + Discord gateways: `merlion gateway start` exposes the agent
-  over a Telegram bot (long-polling) and/or a Discord bot (DM + @mention).
-  Both ride on a shared dispatcher; per-platform allowlist via env vars.
+- Telegram + Discord + Slack gateways: `merlion gateway start` exposes the
+  agent over a Telegram bot (long-polling), Discord bot (DM + @mention),
+  and/or Slack bot (Socket Mode). Three platforms ride on a shared
+  dispatcher; per-platform allowlist via env vars.
+- Cron jobs can deliver results to messaging platforms — set
+  `destination: telegram:<chat_id>` or `destination: discord:<channel_id>`
+  on the job (else stdout).
 - Cron scheduler: `merlion cron add daily "0 0 9 * * *" "summarize my inbox"`
 - Token-usage tracking + automatic retry on 429/5xx
 - One-line installer: `curl -fsSL .../install.sh | bash`

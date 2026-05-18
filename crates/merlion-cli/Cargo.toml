@@ -11,6 +11,13 @@ default-run = "merlion"
 name = "merlion"
 path = "src/main.rs"
 
+# `cargo binstall merlion` will look here for prebuilt binaries once the
+# release workflow (Phase 8.2) starts publishing them.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/merlion-{ target }.tar.gz"
+pkg-fmt = "tgz"
+bin-dir = "merlion-{ target }/{ bin }{ binary-ext }"
+
 [dependencies]
 merlion-core.workspace = true
 merlion-llm.workspace = true
@@ -34,5 +41,6 @@ chrono.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
 futures.workspace = true
+reqwest = { workspace = true, features = ["json"] }
 ratatui = "0.28"
 crossterm = { version = "0.28", features = ["event-stream"] }

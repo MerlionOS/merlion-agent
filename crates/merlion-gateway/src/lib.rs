@@ -10,12 +10,14 @@
 pub mod allowlist;
 pub mod discord;
 pub mod dispatcher;
+pub mod slack;
 pub mod telegram;
 pub mod types;
 
 pub use allowlist::Allowlist;
 pub use discord::DiscordGateway;
 pub use dispatcher::Dispatcher;
+pub use slack::SlackGateway;
 pub use telegram::TelegramGateway;
 pub use types::{Gateway, IncomingMessage, OutgoingMessage, User};
 

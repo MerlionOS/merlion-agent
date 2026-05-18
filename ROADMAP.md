@@ -113,20 +113,20 @@ can call them transparently.
 
 ---
 
-## Phase 5 — Messaging gateway (≈10 of 16 session hours done)
+## Phase 5 — Messaging gateway (≈13 of 16 session hours done)
 
-Talk to the agent from your phone. Hermes ships ~20 platforms; we start with
-the three highest-value. Telegram landed first because it's long-poll HTTP
-(no WebSocket / no public webhook endpoint required); Discord followed via
-`serenity`'s Gateway WebSocket client. `merlion gateway start` starts every
-configured platform concurrently.
+Talk to the agent from your phone. Hermes ships ~20 platforms; we ship the
+three highest-value: Telegram (long-poll HTTP), Discord (serenity Gateway
+WS), and Slack (Socket Mode WS over hand-rolled tokio-tungstenite — no
+slack-morphism). `merlion gateway start` starts every configured platform
+concurrently.
 
 | # | Deliverable | Files | Est. | Status |
 |---|---|---|---|---|
 | 5.1 | `Gateway` trait + dispatcher in a new `merlion-gateway` crate | `crates/merlion-gateway/` | 2h | ✅ |
 | 5.2 | Telegram adapter (long-polling) | `merlion-gateway/src/telegram.rs` | 3h | ✅ |
 | 5.3 | Discord adapter (DM + @mention, serenity) | `merlion-gateway/src/discord.rs` | 3h | ✅ |
-| 5.4 | Slack adapter (Socket Mode) | `merlion-gateway/src/slack.rs` | 3h | ⬜️ |
+| 5.4 | Slack adapter (Socket Mode, tokio-tungstenite) | `merlion-gateway/src/slack.rs` | 3h | ✅ |
 | 5.5 | Env-var per-platform allowlist (Allowlist::from_env) | `merlion-gateway/src/allowlist.rs` | 1.5h | ✅ |
 | 5.6 | Cross-platform session continuity | session join keys | 1.5h | ⬜️ |
 | 5.7 | `merlion gateway {start,status}` | `merlion-cli` | 1h | ✅ |
@@ -149,7 +149,7 @@ Scheduled runs + isolation from the host filesystem.
 | # | Deliverable | Files | Est. | Status |
 |---|---|---|---|---|
 | 6.1 | Cron scheduler with cron-expression parsing, persisted job table | `crates/merlion-cron/` | 2h | ✅ |
-| 6.2 | Job → messaging-platform delivery (uses Phase 5 gateway) | `merlion-cron/src/delivery.rs` | 1h | ⬜️ |
+| 6.2 | Job → messaging delivery (`telegram:<chat>` / `discord:<channel>`) | `merlion-cli` | 1h | ✅ |
 | 6.3 | `merlion cron {add,list,remove,run,daemon}` subcommands | `merlion-cli` | 1h | ✅ |
 | 6.4 | Docker terminal backend (run shell commands in a container) | `merlion-tools/src/sandboxes/docker.rs` | 2h | ⬜️ |
 | 6.5 | SSH terminal backend (run on a remote host) | `merlion-tools/src/sandboxes/ssh.rs` | 2h | ⬜️ |
@@ -170,7 +170,7 @@ this tractable in Rust.
 |---|---|---|---|---|
 | 7.1 | ratatui scaffolding: layout, event loop, render budget | `merlion-cli/src/tui/` | 2h | ✅ |
 | 7.2 | Multiline editor widget (Ctrl+J newline, Enter submit) | `merlion-cli/src/tui/input.rs` | 2h | ✅ |
-| 7.3 | Slash-command autocomplete (Tab) | `merlion-cli/src/tui/` | 1.5h | ⬜️ |
+| 7.3 | Slash-command autocomplete (Tab) for `/<skill>` | `merlion-cli/src/tui/app.rs` | 1.5h | ✅ |
 | 7.4 | Streaming output pane with interrupt-and-redirect (Ctrl+C → new input) | `merlion-cli/src/tui/app.rs` | 2h | ✅ |
 | 7.5 | Tool-output collapsible panes (rendered inline; collapse TBD) | `merlion-cli/src/tui/render.rs` | 1.5h | ✅ |
 | 7.6 | History scroll (keyboard via PgUp/PgDn/Esc) | `merlion-cli/src/tui/app.rs` | 1.5h | ✅ |
@@ -191,10 +191,10 @@ Make merlion installable in one command from anywhere.
 | 8.1 | GitHub Actions CI: build + test on linux/macos | `.github/workflows/ci.yml` | 1h | ✅ |
 | 8.2 | Release workflow: `cargo dist`-style cross-compiled artifacts | `.github/workflows/release.yml` | 1.5h | ⬜️ |
 | 8.3 | Homebrew formula (tap or core) | `Formula/merlion.rb` | 1h | ⬜️ |
-| 8.4 | `cargo binstall` metadata | `Cargo.toml` | 0.25h | ⬜️ |
+| 8.4 | `cargo binstall` metadata | `merlion-cli/Cargo.toml` | 0.25h | ✅ |
 | 8.5 | One-line installer: `curl ... \| bash` | `scripts/install.sh` | 1h | ✅ |
 | 8.6 | `merlion update` subcommand (self-update) | `merlion-cli` | 1h | ⬜️ |
-| 8.7 | `merlion doctor` deepened: probes for `rg`, `git`, MCP servers, etc. | `merlion-cli` | 0.25h | ⬜️ |
+| 8.7 | `merlion doctor` deepened: probes for `rg`, `git`, MCP servers, gateway tokens, cron | `merlion-cli` | 0.25h | ✅ |
 
 **Acceptance:** `brew install merlion` or `curl https://… | bash` lands a
 working binary; `merlion update` self-upgrades to the latest release.

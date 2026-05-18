@@ -21,3 +21,4 @@ reqwest = { workspace = true, features = ["json", "stream"] }
 futures.workspace = true
 uuid.workspace = true
 serenity = { version = "0.12", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "cache"] }
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }

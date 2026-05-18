@@ -256,7 +256,7 @@ async fn run_loop(
         let Some(ev) = key_event else { break };
         let ev = ev?;
         let outcome = match ev {
-            Event::Key(key) => handle_key_idle(&mut app, key),
+            Event::Key(key) => handle_key_idle(&mut app, key, skills),
             _ => KeyOutcome::None,
         };
         match outcome {
@@ -314,7 +314,7 @@ async fn run_loop(
 
 /// Wait for input while no agent is running. Mutates `app` for editing keys
 /// and returns a `KeyOutcome` for actions the run loop needs to react to.
-fn handle_key_idle(app: &mut App, key: KeyEvent) -> KeyOutcome {
+fn handle_key_idle(app: &mut App, key: KeyEvent, skills: &SkillSet) -> KeyOutcome {
     if key.kind == KeyEventKind::Release {
         return KeyOutcome::None;
     }
@@ -413,7 +413,39 @@ fn handle_key_idle(app: &mut App, key: KeyEvent) -> KeyOutcome {
             }
             KeyOutcome::None
         }
-        KeyCode::Tab => KeyOutcome::None,
+        KeyCode::Tab => {
+            // Skill autocomplete: if the input is `/<prefix>` (no spaces yet),
+            // expand to the longest unique skill whose name starts with prefix.
+            if let Some(rest) = app.input.strip_prefix('/') {
+                if !rest.contains(char::is_whitespace) {
+                    let matches: Vec<&str> = skills
+                        .names()
+                        .into_iter()
+                        .filter(|n| n.starts_with(rest))
+                        .collect();
+                    match matches.as_slice() {
+                        [single] => {
+                            app.input = format!("/{single} ");
+                            app.cursor = app.input.chars().count();
+                        }
+                        [] => {}
+                        many => {
+                            // Multiple matches → complete to the common prefix
+                            // and stash the candidate list into the status line
+                            // so the user can see what's available.
+                            let lcp = longest_common_prefix(many);
+                            if lcp.len() > rest.len() {
+                                app.input = format!("/{lcp}");
+                                app.cursor = app.input.chars().count();
+                            }
+                            app.status =
+                                format!("skills: {}", many.iter().copied().collect::<Vec<_>>().join(", "));
+                        }
+                    }
+                }
+            }
+            KeyOutcome::None
+        }
         KeyCode::Esc => {
             if app.user_scrolled {
                 app.scroll = 0;
@@ -679,3 +711,39 @@ pub fn handle_agent_event(app: &mut App, ev: AgentEvent) {
     }
 }
 
+
+
+/// Longest common prefix among a slice of strings. Returns "" for empty input.
+fn longest_common_prefix(strs: &[&str]) -> String {
+    let Some(first) = strs.first() else { return String::new() };
+    let mut prefix: String = first.to_string();
+    for s in &strs[1..] {
+        while !s.starts_with(&prefix) {
+            prefix.pop();
+            if prefix.is_empty() {
+                return String::new();
+            }
+        }
+    }
+    prefix
+}
+
+#[cfg(test)]
+mod tab_tests {
+    use super::longest_common_prefix;
+
+    #[test]
+    fn lcp_single_returns_self() {
+        assert_eq!(longest_common_prefix(&["review"]), "review");
+    }
+
+    #[test]
+    fn lcp_two_branches() {
+        assert_eq!(longest_common_prefix(&["review", "rebase"]), "re");
+    }
+
+    #[test]
+    fn lcp_no_overlap_returns_empty() {
+        assert_eq!(longest_common_prefix(&["foo", "bar"]), "");
+    }
+}
