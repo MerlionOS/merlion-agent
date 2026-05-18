@@ -61,6 +61,19 @@ What's coming (see [ROADMAP.md](ROADMAP.md)):
 - Sandboxed terminal backends (docker, ssh)
 - ratatui-based TUI
 
+## Install (prebuilt)
+
+```bash
+# Homebrew (once the tap is published):
+brew tap MerlionOS/merlion
+brew install merlion
+
+# cargo-binstall:
+cargo binstall merlion
+
+# Manual: download from https://github.com/MerlionOS/merlion-agent/releases
+```
+
 ## Build
 
 ```bash

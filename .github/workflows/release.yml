@@ -1,0 +1,118 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            target: aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: cargo install cross --locked
+
+      - name: Cross build
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: cross build --release --bin merlion --target ${{ matrix.target }}
+
+      - name: Native build
+        if: matrix.target != 'aarch64-unknown-linux-gnu'
+        run: cargo build --release --bin merlion --target ${{ matrix.target }}
+
+      - name: Strip binary (macOS)
+        if: runner.os == 'macOS'
+        run: strip -x target/${{ matrix.target }}/release/merlion
+
+      - name: Strip binary (Linux, native)
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: strip target/${{ matrix.target }}/release/merlion
+
+      # Cross-compiled aarch64 binary needs the aarch64 strip; cross's docker
+      # image isn't around at this step, so leave it to the release profile's
+      # `strip = "symbols"` to handle it.
+
+      - name: Package tarball
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="merlion-${{ matrix.target }}"
+          mkdir -p "$stage"
+          cp "target/${{ matrix.target }}/release/merlion" "$stage/merlion"
+          tar -czf "${stage}.tar.gz" "$stage"
+
+      - name: Compute sha256 (Linux)
+        if: runner.os == 'Linux'
+        run: sha256sum "merlion-${{ matrix.target }}.tar.gz" > "merlion-${{ matrix.target }}.tar.gz.sha256"
+
+      - name: Compute sha256 (macOS)
+        if: runner.os == 'macOS'
+        run: shasum -a 256 "merlion-${{ matrix.target }}.tar.gz" > "merlion-${{ matrix.target }}.tar.gz.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: merlion-${{ matrix.target }}
+          path: |
+            merlion-${{ matrix.target }}.tar.gz
+            merlion-${{ matrix.target }}.tar.gz.sha256
+          if-no-files-found: error
+
+  release:
+    name: Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List release assets
+        run: ls -la dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            dist/merlion-*.tar.gz
+            dist/merlion-*.tar.gz.sha256

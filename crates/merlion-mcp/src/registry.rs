@@ -51,7 +51,11 @@ pub enum TransportSpec {
         #[serde(default)]
         env: BTreeMap<String, String>,
     },
-    // HTTP is Phase 4 future work.
+    Http {
+        url: String,
+        #[serde(default)]
+        bearer_env: Option<String>,
+    },
 }
 
 impl McpRegistry {
@@ -113,6 +117,13 @@ impl ServerEntry {
             enabled: true,
         }
     }
+
+    pub fn http(url: impl Into<String>) -> Self {
+        Self {
+            transport: TransportSpec::Http { url: url.into(), bearer_env: None },
+            enabled: true,
+        }
+    }
 }
 
 /// Parsed CLI shorthand: `"npx -y @modelcontextprotocol/server-filesystem /tmp"`.
@@ -154,6 +165,7 @@ mod tests {
                 assert_eq!(command, "npx");
                 assert_eq!(args.len(), 3);
             }
+            TransportSpec::Http { .. } => panic!("expected stdio"),
         }
         assert!(entry.enabled, "default enabled should round-trip as true");
     }
@@ -166,6 +178,7 @@ mod tests {
                 assert_eq!(command, "npx");
                 assert_eq!(args, vec!["-y", "@mcp/fs", "/tmp"]);
             }
+            TransportSpec::Http { .. } => panic!("expected stdio"),
         }
     }
 }

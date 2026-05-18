@@ -1,6 +1,8 @@
 //! Built-in tools shipped with Merlion Agent.
 
 pub mod bash;
+pub mod bash_docker;
+pub mod bash_ssh;
 pub mod edit;
 pub mod glob;
 pub mod grep;
@@ -39,4 +41,13 @@ pub fn register_memory(reg: &mut ToolRegistry, store: Arc<MemoryStore>) {
 pub fn register_skill_tools(reg: &mut ToolRegistry, cfg: Arc<skill_tools::SkillToolsConfig>) {
     reg.register(skill_tools::SkillCreate::new(cfg.clone()));
     reg.register(skill_tools::SkillUpdate::new(cfg));
+}
+
+/// Register the sandboxed bash variants (`bash_docker`, `bash_ssh`). Opt-in
+/// — most users want the host `bash` tool only. Sandbox tools are useful
+/// when the agent is allowed to run shell commands but shouldn't touch the
+/// host filesystem directly.
+pub fn register_sandbox_bash(reg: &mut ToolRegistry) {
+    reg.register(bash_docker::BashDocker::default());
+    reg.register(bash_ssh::BashSsh::default());
 }

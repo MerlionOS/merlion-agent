@@ -8,12 +8,14 @@
 //! [spec]: https://spec.modelcontextprotocol.io/specification/2024-11-05/
 
 pub mod client;
+pub mod http;
 pub mod proto;
 pub mod proxy;
 pub mod registry;
 pub mod stdio;
 
 pub use client::{McpClient, Transport};
+pub use http::HttpTransport;
 pub use proto::{CallToolResult, ContentItem, McpTool, RpcError, PROTOCOL_VERSION};
 pub use proxy::{make_exposed_name, McpProxyTool};
 pub use registry::{McpRegistry, ServerEntry, TransportSpec};

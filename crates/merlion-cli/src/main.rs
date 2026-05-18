@@ -75,6 +75,8 @@ enum Command {
         #[command(subcommand)]
         action: CronAction,
     },
+    /// Check for a newer merlion release on GitHub and print install hints.
+    Update,
 }
 
 #[derive(Debug, Subcommand)]
@@ -117,6 +119,14 @@ enum McpAction {
         /// Command + args, separated from the name by `--`.
         #[arg(trailing_var_arg = true, allow_hyphen_values = true, required = true)]
         command: Vec<String>,
+    },
+    /// Add an HTTP server: `merlion mcp add-http my-srv https://mcp.example.com/`.
+    AddHttp {
+        name: String,
+        url: String,
+        /// Env var to read the bearer token from. Optional.
+        #[arg(long)]
+        bearer_env: Option<String>,
     },
     /// Remove a configured server.
     Remove { name: String },
@@ -170,7 +180,34 @@ async fn main() -> Result<()> {
         Command::Mcp { action } => mcp_cmd(action).await,
         Command::Gateway { action } => gateway_cmd(cfg, action).await,
         Command::Cron { action } => cron_cmd(cfg, action).await,
+        Command::Update => update_cmd().await,
     }
+}
+
+async fn update_cmd() -> Result<()> {
+    let api = "https://api.github.com/repos/MerlionOS/merlion-agent/releases/latest";
+    let client = reqwest::Client::builder()
+        .user_agent(concat!("merlion/", env!("CARGO_PKG_VERSION")))
+        .build()?;
+    let resp = client.get(api).send().await?;
+    if !resp.status().is_success() {
+        anyhow::bail!("github releases api {}: {}", resp.status(), resp.text().await.unwrap_or_default());
+    }
+    let body: serde_json::Value = resp.json().await?;
+    let latest = body.get("tag_name").and_then(|v| v.as_str()).unwrap_or("(unknown)");
+    let current = format!("v{}", env!("CARGO_PKG_VERSION"));
+    println!("installed:  {current}");
+    println!("latest tag: {latest}");
+    if latest == current || latest == format!("v{current}") {
+        println!("already up to date.");
+        return Ok(());
+    }
+    println!();
+    println!("To upgrade:");
+    println!("  cargo binstall merlion --version {}", latest.trim_start_matches('v'));
+    println!("  brew upgrade merlion          # if installed via Homebrew");
+    println!("  curl -fsSL https://raw.githubusercontent.com/MerlionOS/merlion-agent/main/scripts/install.sh | bash");
+    Ok(())
 }
 
 fn model_cmd(mut cfg: Config, id: Option<String>) -> Result<()> {
@@ -329,6 +366,10 @@ async fn mcp_cmd(action: McpAction) -> Result<()> {
                         let argline = args.iter().cloned().collect::<Vec<_>>().join(" ");
                         println!("{status}  {name}\t stdio: {command} {argline}");
                     }
+                    TransportSpec::Http { url, bearer_env } => {
+                        let auth = bearer_env.as_deref().unwrap_or("(none)");
+                        println!("{status}  {name}\t http:  {url} (auth env: {auth})");
+                    }
                 }
             }
         }
@@ -342,6 +383,15 @@ async fn mcp_cmd(action: McpAction) -> Result<()> {
             reg.save(&path)
                 .map_err(|e| anyhow::anyhow!("writing {}: {e}", path.display()))?;
             println!("added MCP server `{name}` to {}", path.display());
+        }
+        McpAction::AddHttp { name, url, bearer_env } => {
+            let mut entry = ServerEntry::http(url.clone());
+            if let TransportSpec::Http { bearer_env: be, .. } = &mut entry.transport {
+                *be = bearer_env;
+            }
+            reg.add(&name, entry);
+            reg.save(&path).map_err(|e| anyhow::anyhow!("writing {}: {e}", path.display()))?;
+            println!("added HTTP MCP server `{name}` ({url}) to {}", path.display());
         }
         McpAction::Remove { name } => match reg.remove(&name) {
             Some(_) => {
@@ -428,6 +478,7 @@ async fn autoload_server(
 }
 
 async fn connect_server(entry: &ServerEntry) -> Result<McpClient> {
+    use merlion_mcp::HttpTransport;
     let transport: Box<dyn merlion_mcp::Transport> = match &entry.transport {
         TransportSpec::Stdio { command, args, env } => {
             let env_vec: Vec<(String, String)> =
@@ -435,6 +486,19 @@ async fn connect_server(entry: &ServerEntry) -> Result<McpClient> {
             let t = StdioTransport::spawn(command, args, &env_vec)
                 .await
                 .map_err(|e| anyhow::anyhow!("spawn `{command}`: {e}"))?;
+            Box::new(t)
+        }
+        TransportSpec::Http { url, bearer_env } => {
+            let mut t = HttpTransport::new(url.clone())
+                .map_err(|e| anyhow::anyhow!("http transport `{url}`: {e}"))?;
+            if let Some(env_var) = bearer_env.as_deref() {
+                match std::env::var(env_var) {
+                    Ok(tok) => t = t.with_bearer(tok),
+                    Err(_) => {
+                        eprintln!("warning: bearer env `{env_var}` not set; mcp `{url}` will go unauth");
+                    }
+                }
+            }
             Box::new(t)
         }
     };

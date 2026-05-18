@@ -18,3 +18,5 @@ async-trait.workspace = true
 tracing.workspace = true
 dirs.workspace = true
 futures.workspace = true
+reqwest.workspace = true
+async-stream = "0.3"

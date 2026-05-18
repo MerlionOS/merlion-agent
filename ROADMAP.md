@@ -101,7 +101,7 @@ databases, etc.).
 |---|---|---|---|---|
 | 4.1 | MCP wire types + client (initialize, tools/list, tools/call) | `crates/merlion-mcp/src/{proto,client}.rs` | 1h | ✅ |
 | 4.2 | Stdio transport (spawn server, JSON-RPC framing, pending map) | `merlion-mcp/src/stdio.rs` | 1.5h | ✅ |
-| 4.3 | HTTP+SSE transport | `merlion-mcp/src/http.rs` | 1.5h | ⬜️ |
+| 4.3 | HTTP+SSE transport (JSON or text/event-stream response) | `merlion-mcp/src/http.rs` | 1.5h | ✅ |
 | 4.4 | Server registry: `~/.merlion/mcp.yaml` | `merlion-mcp/src/registry.rs` | 1h | ✅ |
 | 4.5 | `McpProxyTool` + autoload on chat startup | `merlion-mcp/src/proxy.rs`, `merlion-cli` | 1h | ✅ |
 | 4.6 | OAuth flow for MCP servers that require it | `merlion-mcp/src/oauth.rs` | 1.5h | ⬜️ |
@@ -151,8 +151,8 @@ Scheduled runs + isolation from the host filesystem.
 | 6.1 | Cron scheduler with cron-expression parsing, persisted job table | `crates/merlion-cron/` | 2h | ✅ |
 | 6.2 | Job → messaging delivery (`telegram:<chat>` / `discord:<channel>`) | `merlion-cli` | 1h | ✅ |
 | 6.3 | `merlion cron {add,list,remove,run,daemon}` subcommands | `merlion-cli` | 1h | ✅ |
-| 6.4 | Docker terminal backend (run shell commands in a container) | `merlion-tools/src/sandboxes/docker.rs` | 2h | ⬜️ |
-| 6.5 | SSH terminal backend (run on a remote host) | `merlion-tools/src/sandboxes/ssh.rs` | 2h | ⬜️ |
+| 6.4 | Docker terminal backend (run shell commands in a container) | `merlion-tools/src/bash_docker.rs` | 2h | ✅ |
+| 6.5 | SSH terminal backend (run on a remote host) | `merlion-tools/src/bash_ssh.rs` | 2h | ✅ |
 
 **Acceptance:** `merlion cron add "0 9 * * * 'check my email and summarize'"`
 runs at 9am daily and delivers the result to Telegram.
@@ -175,7 +175,7 @@ this tractable in Rust.
 | 7.5 | Tool-output collapsible panes (rendered inline; collapse TBD) | `merlion-cli/src/tui/render.rs` | 1.5h | ✅ |
 | 7.6 | History scroll (keyboard via PgUp/PgDn/Esc) | `merlion-cli/src/tui/app.rs` | 1.5h | ✅ |
 | 7.7 | `--tui` flag default-on when stdout is a TTY | `merlion-cli` | 0.5h | ✅ |
-| 7.8 | Light/dark theme via config | `merlion-cli/src/tui/theme.rs` | 1h | ⬜️ |
+| 7.8 | Light/dark theme via `MERLION_THEME` env var | `merlion-cli/src/tui/theme.rs` | 1h | ✅ |
 
 **Acceptance:** running `merlion` in a terminal feels modern — streaming,
 collapsible tool output, no flicker, interrupt mid-stream.
@@ -189,11 +189,11 @@ Make merlion installable in one command from anywhere.
 | # | Deliverable | Files | Est. | Status |
 |---|---|---|---|---|
 | 8.1 | GitHub Actions CI: build + test on linux/macos | `.github/workflows/ci.yml` | 1h | ✅ |
-| 8.2 | Release workflow: `cargo dist`-style cross-compiled artifacts | `.github/workflows/release.yml` | 1.5h | ⬜️ |
-| 8.3 | Homebrew formula (tap or core) | `Formula/merlion.rb` | 1h | ⬜️ |
+| 8.2 | Release workflow: cross-compiled tarballs (linux × arm/x86, mac × arm/x86) on `v*` tag | `.github/workflows/release.yml` | 1.5h | ✅ |
+| 8.3 | Homebrew formula (tap-ready, sha256 placeholders) | `Formula/merlion.rb` | 1h | ✅ |
 | 8.4 | `cargo binstall` metadata | `merlion-cli/Cargo.toml` | 0.25h | ✅ |
 | 8.5 | One-line installer: `curl ... \| bash` | `scripts/install.sh` | 1h | ✅ |
-| 8.6 | `merlion update` subcommand (self-update) | `merlion-cli` | 1h | ⬜️ |
+| 8.6 | `merlion update` subcommand (checks GitHub Releases, prints install hints) | `merlion-cli` | 1h | ✅ |
 | 8.7 | `merlion doctor` deepened: probes for `rg`, `git`, MCP servers, gateway tokens, cron | `merlion-cli` | 0.25h | ✅ |
 
 **Acceptance:** `brew install merlion` or `curl https://… | bash` lands a
