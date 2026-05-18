@@ -1,0 +1,30 @@
+[package]
+name = "merlion-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Merlion Agent CLI"
+default-run = "merlion"
+
+[[bin]]
+name = "merlion"
+path = "src/main.rs"
+
+[dependencies]
+merlion-core.workspace = true
+merlion-llm.workspace = true
+merlion-tools.workspace = true
+merlion-config.workspace = true
+merlion-session.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+rustyline.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+futures.workspace = true

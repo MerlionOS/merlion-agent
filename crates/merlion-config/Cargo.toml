@@ -1,0 +1,16 @@
+[package]
+name = "merlion-config"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Config loading + ~/.merlion home for Merlion Agent"
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+dirs.workspace = true
+dotenvy.workspace = true
+tracing.workspace = true

@@ -1,0 +1,18 @@
+[package]
+name = "merlion-tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Built-in tools for Merlion Agent (bash, file I/O, edit)"
+
+[dependencies]
+merlion-core.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["process", "io-util", "fs", "time", "macros", "rt-multi-thread"] }
+async-trait.workspace = true
+tracing.workspace = true
+shell-escape.workspace = true
