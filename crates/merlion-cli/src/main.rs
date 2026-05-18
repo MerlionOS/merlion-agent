@@ -8,6 +8,10 @@ use merlion_core::{
     Agent, AgentEvent, AgentOptions, Curator, LlmClient, Message, ToolApprover, ToolRegistry,
 };
 use merlion_llm::{AnthropicClient, GeminiClient, OpenAiClient};
+use merlion_mcp::{
+    make_exposed_name, McpClient, McpProxyTool, McpRegistry, ServerEntry, StdioTransport,
+    TransportSpec,
+};
 use merlion_memory::MemoryStore;
 use merlion_session::SessionDB;
 use merlion_skills::SkillSet;
@@ -49,6 +53,33 @@ enum Command {
         #[command(subcommand)]
         action: Option<SessionsAction>,
     },
+    /// Manage MCP (Model Context Protocol) servers.
+    Mcp {
+        #[command(subcommand)]
+        action: McpAction,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum McpAction {
+    /// List configured servers and their enabled state.
+    List,
+    /// Add a stdio server: `merlion mcp add fs -- npx -y @mcp/fs /tmp`.
+    Add {
+        /// Logical name (used to prefix the exposed tool names).
+        name: String,
+        /// Command + args, separated from the name by `--`.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true, required = true)]
+        command: Vec<String>,
+    },
+    /// Remove a configured server.
+    Remove { name: String },
+    /// Enable a previously-disabled server.
+    Enable { name: String },
+    /// Disable a server without removing it.
+    Disable { name: String },
+    /// Connect to a server, run the initialize handshake, list its tools.
+    Test { name: String },
 }
 
 #[derive(Debug, Subcommand)]
@@ -87,6 +118,7 @@ async fn main() -> Result<()> {
         Command::Config { action } => config_cmd(cfg, action),
         Command::Doctor => doctor(cfg),
         Command::Sessions { action } => sessions_cmd(action),
+        Command::Mcp { action } => mcp_cmd(action).await,
     }
 }
 
@@ -156,6 +188,135 @@ fn sessions_cmd(action: Option<SessionsAction>) -> Result<()> {
     Ok(())
 }
 
+async fn mcp_cmd(action: McpAction) -> Result<()> {
+    let path = McpRegistry::default_path();
+    let mut reg = McpRegistry::load(&path)
+        .map_err(|e| anyhow::anyhow!("loading {}: {e}", path.display()))?;
+    match action {
+        McpAction::List => {
+            if reg.servers.is_empty() {
+                println!("(no MCP servers configured — see `merlion mcp add --help`)");
+                return Ok(());
+            }
+            for (name, entry) in &reg.servers {
+                let status = if entry.enabled { "enabled " } else { "disabled" };
+                match &entry.transport {
+                    TransportSpec::Stdio { command, args, .. } => {
+                        let argline = args.iter().cloned().collect::<Vec<_>>().join(" ");
+                        println!("{status}  {name}\t stdio: {command} {argline}");
+                    }
+                }
+            }
+        }
+        McpAction::Add { name, command } => {
+            if command.is_empty() {
+                anyhow::bail!("missing command — usage: `merlion mcp add <name> -- <cmd> <args...>`");
+            }
+            let program = command[0].clone();
+            let args: Vec<String> = command.into_iter().skip(1).collect();
+            reg.add(&name, ServerEntry::stdio(program, args));
+            reg.save(&path)
+                .map_err(|e| anyhow::anyhow!("writing {}: {e}", path.display()))?;
+            println!("added MCP server `{name}` to {}", path.display());
+        }
+        McpAction::Remove { name } => match reg.remove(&name) {
+            Some(_) => {
+                reg.save(&path)
+                    .map_err(|e| anyhow::anyhow!("writing {}: {e}", path.display()))?;
+                println!("removed `{name}`");
+            }
+            None => println!("(no server named `{name}`)"),
+        },
+        McpAction::Enable { name } => {
+            toggle_server(&mut reg, &name, true)?;
+            reg.save(&path)
+                .map_err(|e| anyhow::anyhow!("writing {}: {e}", path.display()))?;
+            println!("enabled `{name}`");
+        }
+        McpAction::Disable { name } => {
+            toggle_server(&mut reg, &name, false)?;
+            reg.save(&path)
+                .map_err(|e| anyhow::anyhow!("writing {}: {e}", path.display()))?;
+            println!("disabled `{name}`");
+        }
+        McpAction::Test { name } => {
+            let entry = reg
+                .servers
+                .get(&name)
+                .ok_or_else(|| anyhow::anyhow!("no server named `{name}` (try `merlion mcp list`)"))?;
+            let client = connect_server(entry).await?;
+            let info = client.initialize().await.context("initialize handshake")?;
+            let server_name = info
+                .server_info
+                .as_ref()
+                .map(|s| s.name.as_str())
+                .unwrap_or("(unknown)");
+            println!("ok — server `{server_name}` (protocol {})", info.protocol_version);
+            let tools = client.list_tools().await.context("list_tools")?;
+            if tools.is_empty() {
+                println!("(server exposes no tools)");
+            } else {
+                println!("{} tool(s):", tools.len());
+                for t in tools {
+                    let desc = t.description.as_deref().unwrap_or("");
+                    println!("  - {} — {desc}", t.name);
+                }
+            }
+            let _ = client.close().await;
+        }
+    }
+    Ok(())
+}
+
+fn toggle_server(reg: &mut McpRegistry, name: &str, enabled: bool) -> Result<()> {
+    let entry = reg
+        .servers
+        .get_mut(name)
+        .ok_or_else(|| anyhow::anyhow!("no server named `{name}` (try `merlion mcp list`)"))?;
+    entry.enabled = enabled;
+    Ok(())
+}
+
+/// Connect to one configured server, list its tools, and register a
+/// `McpProxyTool` for each into the given registry. Returns the live
+/// [`McpClient`] so the caller can keep it alive for the duration of the
+/// session (dropping it would kill the child process).
+async fn autoload_server(
+    server_name: &str,
+    entry: &ServerEntry,
+    tools: &mut ToolRegistry,
+) -> Result<Arc<McpClient>> {
+    let client = Arc::new(connect_server(entry).await?);
+    client
+        .initialize()
+        .await
+        .map_err(|e| anyhow::anyhow!("initialize: {e}"))?;
+    let remote_tools = client
+        .list_tools()
+        .await
+        .map_err(|e| anyhow::anyhow!("list_tools: {e}"))?;
+    for t in remote_tools {
+        let exposed = make_exposed_name(server_name, &t.name);
+        let proxy = McpProxyTool::new(client.clone(), exposed, t);
+        tools.register_arc(Arc::new(proxy));
+    }
+    Ok(client)
+}
+
+async fn connect_server(entry: &ServerEntry) -> Result<McpClient> {
+    let transport: Box<dyn merlion_mcp::Transport> = match &entry.transport {
+        TransportSpec::Stdio { command, args, env } => {
+            let env_vec: Vec<(String, String)> =
+                env.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            let t = StdioTransport::spawn(command, args, &env_vec)
+                .await
+                .map_err(|e| anyhow::anyhow!("spawn `{command}`: {e}"))?;
+            Box::new(t)
+        }
+    };
+    Ok(McpClient::new(transport))
+}
+
 async fn chat(cfg: Config, resume: Option<String>) -> Result<()> {
     let provider = cfg.resolve_provider()?;
     let api_key = std::env::var(&provider.api_key_env).ok();
@@ -192,6 +353,21 @@ async fn chat(cfg: Config, resume: Option<String>) -> Result<()> {
     merlion_tools::register_memory(&mut tools, memory_store.clone());
     merlion_tools::register_skill_tools(&mut tools, skill_cfg);
 
+    // Connect to configured MCP servers and inject their tools. Connection
+    // failures are logged, not fatal — one broken server shouldn't take down
+    // the agent.
+    let mut mcp_clients: Vec<Arc<McpClient>> = Vec::new();
+    let mcp_registry = McpRegistry::load_default().unwrap_or_else(|e| {
+        eprintln!("warning: could not load MCP registry: {e}");
+        McpRegistry::default()
+    });
+    for (server_name, entry) in mcp_registry.enabled_servers() {
+        match autoload_server(server_name, entry, &mut tools).await {
+            Ok(client) => mcp_clients.push(client),
+            Err(e) => eprintln!("warning: MCP server `{server_name}` failed to load: {e}"),
+        }
+    }
+
     let mut options = AgentOptions::default();
     options.model = provider.model.clone();
     options.temperature = cfg.model.temperature;
@@ -220,11 +396,12 @@ async fn chat(cfg: Config, resume: Option<String>) -> Result<()> {
     }
 
     println!(
-        "merlion — model {} · session {} · {} skills · {} memories",
+        "merlion — model {} · session {} · {} skills · {} memories · {} MCP server(s)",
         provider.model,
         &session_id[..8],
         skills.len(),
         memory_store.list().map(|v| v.len()).unwrap_or(0),
+        mcp_clients.len(),
     );
     println!("Type your message, blank line to end, /exit to quit, /help for commands.");
 

@@ -31,6 +31,10 @@ What works today:
   bundled `./skills/` dir; invoke with `/<name>` in chat
 - Periodic curator nudge (default every 20 user turns) reminds the model
   to save durable facts to memory
+- MCP (Model Context Protocol) integration over stdio — `merlion mcp add fs
+  -- npx -y @modelcontextprotocol/server-filesystem ~/projects` adds a
+  server; its tools auto-load into the agent on next chat as
+  `mcp_<server>_<tool>`
 - Providers: OpenAI, OpenRouter, Nous Portal, NovitaAI, Moonshot, MiniMax,
   z.ai/GLM, Groq, DeepSeek (all via `POST /chat/completions`), plus
   **Anthropic** (`POST /v1/messages`, native) and **Gemini**

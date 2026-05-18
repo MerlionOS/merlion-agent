@@ -92,20 +92,20 @@ skill mid-conversation and invoke it next time with `/<name>`.
 
 ---
 
-## Phase 4 — MCP integration (≈8 session hours)
+## Phase 4 — MCP integration (≈6 of 8 session hours done)
 
 Connect the agent to the wider ecosystem of MCP servers (filesystem, GitHub,
 databases, etc.).
 
 | # | Deliverable | Files | Est. | Status |
 |---|---|---|---|---|
-| 4.1 | MCP wire types (Initialize, ListTools, CallTool) | `crates/merlion-mcp/src/proto.rs` | 1h | ⬜️ |
-| 4.2 | Stdio transport (spawn server process, framed JSON-RPC) | `merlion-mcp/src/stdio.rs` | 1.5h | ⬜️ |
+| 4.1 | MCP wire types + client (initialize, tools/list, tools/call) | `crates/merlion-mcp/src/{proto,client}.rs` | 1h | ✅ |
+| 4.2 | Stdio transport (spawn server, JSON-RPC framing, pending map) | `merlion-mcp/src/stdio.rs` | 1.5h | ✅ |
 | 4.3 | HTTP+SSE transport | `merlion-mcp/src/http.rs` | 1.5h | ⬜️ |
-| 4.4 | MCP server registry: `~/.merlion/mcp.yaml` | `merlion-mcp/src/registry.rs` | 1h | ⬜️ |
-| 4.5 | Inject MCP tools into `ToolRegistry` on startup | `merlion-cli` | 1h | ⬜️ |
+| 4.4 | Server registry: `~/.merlion/mcp.yaml` | `merlion-mcp/src/registry.rs` | 1h | ✅ |
+| 4.5 | `McpProxyTool` + autoload on chat startup | `merlion-mcp/src/proxy.rs`, `merlion-cli` | 1h | ✅ |
 | 4.6 | OAuth flow for MCP servers that require it | `merlion-mcp/src/oauth.rs` | 1.5h | ⬜️ |
-| 4.7 | `merlion mcp {add,list,remove,test}` subcommands | `merlion-cli` | 0.5h | ⬜️ |
+| 4.7 | `merlion mcp {list,add,remove,enable,disable,test}` subcommands | `merlion-cli` | 0.5h | ✅ |
 
 **Acceptance:** `merlion mcp add filesystem ~/projects` adds a working
 filesystem MCP server; its tools show up in `merlion doctor` and the agent

@@ -986,6 +986,7 @@ dependencies = [
  "merlion-config",
  "merlion-core",
  "merlion-llm",
+ "merlion-mcp",
  "merlion-memory",
  "merlion-session",
  "merlion-skills",
@@ -1044,6 +1045,23 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
+ "tracing",
+]
+
+[[package]]
+name = "merlion-mcp"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "dirs",
+ "futures",
+ "merlion-core",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "thiserror 2.0.18",
+ "tokio",
  "tracing",
 ]
 

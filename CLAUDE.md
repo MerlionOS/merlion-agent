@@ -35,6 +35,7 @@ crates/
 ├── merlion-session   — SQLite + FTS5 conversation store
 ├── merlion-memory    — MEMORY.md store (file per memory + index)
 ├── merlion-skills    — SKILL.md loader (agentskills.io-compatible)
+├── merlion-mcp       — Model Context Protocol client (stdio transport, registry, proxy tool)
 ├── merlion-tools     — bash, read, write, edit, ls, grep, glob, web_fetch, memory, skill_*
 └── merlion-cli       — `merlion` binary with REPL + slash commands
 ```
