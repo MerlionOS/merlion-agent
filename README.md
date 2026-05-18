@@ -21,14 +21,14 @@ What works today:
 - `merlion config show` / `config path`
 - `merlion doctor`
 - Tools: `bash`, `read`, `write`, `edit`, `ls`
-- Providers (OpenAI-compatible): OpenAI, OpenRouter, Nous Portal, NovitaAI,
-  Moonshot, MiniMax, z.ai/GLM, Groq, DeepSeek — and any other endpoint that
-  speaks `POST /chat/completions`.
+- Providers: OpenAI, OpenRouter, Nous Portal, NovitaAI, Moonshot, MiniMax,
+  z.ai/GLM, Groq, DeepSeek (all via `POST /chat/completions`), plus
+  **Anthropic** (`POST /v1/messages`, native).
 - Persistent sessions in `~/.merlion/sessions.db` with FTS5 full-text search.
 
 What's coming (see [ROADMAP.md](ROADMAP.md)):
 
-- Anthropic and Gemini native adapters
+- Gemini native adapter
 - MCP integration
 - Skills system
 - Messaging gateway (Telegram / Discord / Slack first)
@@ -98,6 +98,7 @@ Environment overrides: `MERLION_MODEL`, `MERLION_BASE_URL`, `MERLION_API_KEY_ENV
 | `zai`/`glm`  | `https://api.z.ai/api/paas/v4`                  | `ZAI_API_KEY`       |
 | `groq`       | `https://api.groq.com/openai/v1`                | `GROQ_API_KEY`      |
 | `deepseek`   | `https://api.deepseek.com/v1`                   | `DEEPSEEK_API_KEY`  |
+| `anthropic`  | `https://api.anthropic.com/v1`                  | `ANTHROPIC_API_KEY` |
 
 For anything else, set `model.base_url` and `model.api_key_env` explicitly.
 

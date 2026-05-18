@@ -1,9 +1,15 @@
-//! OpenAI-compatible LLM client.
+//! LLM provider adapters.
 //!
-//! Covers Nous Portal, OpenRouter, NovitaAI, NVIDIA NIM, Moonshot, MiniMax,
-//! z.ai/GLM, OpenAI, and any other endpoint that speaks the chat-completions
-//! protocol. Anthropic and Gemini get dedicated adapters in later phases.
+//! - [`OpenAiClient`] speaks `/v1/chat/completions` and covers Nous Portal,
+//!   OpenRouter, NovitaAI, NVIDIA NIM, Moonshot, MiniMax, z.ai/GLM, Groq,
+//!   DeepSeek, and any other endpoint that implements the chat-completions
+//!   protocol.
+//! - [`AnthropicClient`] speaks Anthropic's native `/v1/messages` API with
+//!   `x-api-key` auth, top-level `system`, and tool_use/tool_result content
+//!   blocks.
 
+pub mod anthropic;
 pub mod openai;
 
+pub use anthropic::AnthropicClient;
 pub use openai::OpenAiClient;

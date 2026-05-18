@@ -20,3 +20,6 @@ async-trait.workspace = true
 tracing.workspace = true
 bytes = "1.7"
 async-stream = "0.3"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }

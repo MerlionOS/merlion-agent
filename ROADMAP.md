@@ -22,7 +22,7 @@ coding agent spends building it, not human-pace estimates.
 
 ## Phase 1 — Provider breadth (≈4–6 session hours)
 
-- [ ] Anthropic native adapter (`/v1/messages`)
+- [x] Anthropic native adapter (`/v1/messages`) — `anthropic:` provider
 - [ ] Gemini native adapter (`generateContent`)
 - [ ] Bedrock + Vertex passthroughs
 - [ ] Usage / cost accounting per response

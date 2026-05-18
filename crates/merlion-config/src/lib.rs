@@ -60,10 +60,19 @@ impl Default for Config {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Wire {
+    /// `POST /chat/completions` with `Authorization: Bearer <key>`.
+    OpenAi,
+    /// `POST /messages` with `x-api-key: <key>` and `anthropic-version` header.
+    Anthropic,
+}
+
 pub struct ResolvedProvider {
     pub model: String,
     pub base_url: String,
     pub api_key_env: String,
+    pub wire: Wire,
 }
 
 impl Config {
@@ -72,20 +81,21 @@ impl Config {
             Some((p, m)) => (p, m),
             None => ("openai", self.model.id.as_str()),
         };
-        let (default_base, default_env) = match provider {
-            "openai" => ("https://api.openai.com/v1", "OPENAI_API_KEY"),
-            "openrouter" => ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
-            "nous" => ("https://inference-api.nousresearch.com/v1", "NOUS_API_KEY"),
-            "novita" => ("https://api.novita.ai/v3/openai", "NOVITA_API_KEY"),
-            "moonshot" => ("https://api.moonshot.ai/v1", "MOONSHOT_API_KEY"),
-            "minimax" => ("https://api.minimaxi.chat/v1", "MINIMAX_API_KEY"),
-            "zai" | "glm" => ("https://api.z.ai/api/paas/v4", "ZAI_API_KEY"),
-            "groq" => ("https://api.groq.com/openai/v1", "GROQ_API_KEY"),
-            "deepseek" => ("https://api.deepseek.com/v1", "DEEPSEEK_API_KEY"),
+        let (default_base, default_env, wire) = match provider {
+            "openai" => ("https://api.openai.com/v1", "OPENAI_API_KEY", Wire::OpenAi),
+            "openrouter" => ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY", Wire::OpenAi),
+            "nous" => ("https://inference-api.nousresearch.com/v1", "NOUS_API_KEY", Wire::OpenAi),
+            "novita" => ("https://api.novita.ai/v3/openai", "NOVITA_API_KEY", Wire::OpenAi),
+            "moonshot" => ("https://api.moonshot.ai/v1", "MOONSHOT_API_KEY", Wire::OpenAi),
+            "minimax" => ("https://api.minimaxi.chat/v1", "MINIMAX_API_KEY", Wire::OpenAi),
+            "zai" | "glm" => ("https://api.z.ai/api/paas/v4", "ZAI_API_KEY", Wire::OpenAi),
+            "groq" => ("https://api.groq.com/openai/v1", "GROQ_API_KEY", Wire::OpenAi),
+            "deepseek" => ("https://api.deepseek.com/v1", "DEEPSEEK_API_KEY", Wire::OpenAi),
+            "anthropic" => ("https://api.anthropic.com/v1", "ANTHROPIC_API_KEY", Wire::Anthropic),
             other => {
                 anyhow::bail!(
                     "unknown provider `{other}`. Set `model.base_url` and `model.api_key_env` explicitly, \
-                     or use one of: openai, openrouter, nous, novita, moonshot, minimax, zai, groq, deepseek."
+                     or use one of: openai, openrouter, nous, novita, moonshot, minimax, zai, groq, deepseek, anthropic."
                 );
             }
         };
@@ -93,6 +103,7 @@ impl Config {
             model: model.to_string(),
             base_url: self.model.base_url.clone().unwrap_or_else(|| default_base.to_string()),
             api_key_env: self.model.api_key_env.clone().unwrap_or_else(|| default_env.to_string()),
+            wire,
         })
     }
 }

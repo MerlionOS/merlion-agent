@@ -3,9 +3,9 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use merlion_config::Config;
-use merlion_core::{Agent, AgentEvent, AgentOptions, Message, ToolRegistry};
-use merlion_llm::OpenAiClient;
+use merlion_config::{Config, Wire};
+use merlion_core::{Agent, AgentEvent, AgentOptions, LlmClient, Message, ToolRegistry};
+use merlion_llm::{AnthropicClient, OpenAiClient};
 use merlion_session::SessionDB;
 use tokio::sync::mpsc;
 use tracing_subscriber::EnvFilter;
@@ -158,7 +158,10 @@ async fn chat(cfg: Config, resume: Option<String>) -> Result<()> {
             provider.api_key_env
         );
     }
-    let client = OpenAiClient::new(provider.base_url.clone(), api_key)?;
+    let client: Arc<dyn LlmClient> = match provider.wire {
+        Wire::OpenAi => Arc::new(OpenAiClient::new(provider.base_url.clone(), api_key)?),
+        Wire::Anthropic => Arc::new(AnthropicClient::new(provider.base_url.clone(), api_key)?),
+    };
 
     let mut tools = ToolRegistry::new();
     merlion_tools::register_defaults(&mut tools);
@@ -169,7 +172,7 @@ async fn chat(cfg: Config, resume: Option<String>) -> Result<()> {
     options.max_tokens = cfg.model.max_tokens;
     options.max_iterations = cfg.max_iterations;
 
-    let agent = Agent::new(Arc::new(client), tools, options);
+    let agent = Agent::new(client, tools, options);
 
     let db = SessionDB::open_default()?;
     let session_id = match resume {
