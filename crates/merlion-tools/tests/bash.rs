@@ -19,9 +19,7 @@ async fn bash_echo_roundtrip() {
 
 #[tokio::test]
 async fn bash_nonzero_exit_is_marked_error() {
-    let r = Bash
-        .call("call_2", json!({ "command": "exit 7" }))
-        .await;
+    let r = Bash.call("call_2", json!({ "command": "exit 7" })).await;
     assert!(r.is_error, "expected non-zero exit to be reported as error");
     assert!(r.content.contains("[exit: 7]"));
 }

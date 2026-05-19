@@ -454,10 +454,7 @@ fn handle_key_idle(app: &mut App, key: KeyEvent, skills: &SkillSet) -> KeyOutcom
                                 app.input = format!("/{lcp}");
                                 app.cursor = app.input.chars().count();
                             }
-                            app.status = format!(
-                                "skills: {}",
-                                many.to_vec().join(", ")
-                            );
+                            app.status = format!("skills: {}", many.to_vec().join(", "));
                         }
                     }
                 }
