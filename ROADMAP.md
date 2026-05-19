@@ -298,6 +298,36 @@ from `~/.merlion/.env` since launchd does not inherit the user shell env.
 
 ---
 
+## Phase 12 — Catalog-driven model picker (v0.1.4, ≈1.5 session hours)
+
+`hermes model` walks an interactive picker: friendly provider labels
+("OpenAI Codex", "Anthropic", "OpenRouter (100+ models)") then a curated
+list of models per provider, with "Enter custom" + "Keep current"
+escapes. `merlion model` v0.1.3 was bare-bones: print id, or set id from
+positional arg. Close the gap.
+
+| # | Item | Files | Est. | Status |
+|---|---|---|---|---|
+| 12.1 | `setup::CATALOG` — `ProviderEntry { prefix, label, api_key_env, models }`; 13 providers × 3–5 popular models, ordered with Anthropic/OpenAI/OpenRouter/Gemini first | `merlion-cli/src/setup.rs` | 0.5h | ✅ |
+| 12.2 | `model_cmd::wizard` — provider menu (friendly labels, marks current) → model menu (catalog list, "Enter custom…", "Keep current") → API key prompt | `merlion-cli/src/model_cmd.rs` | 0.5h | ✅ |
+| 12.3 | `model_cmd::set_shortcut` — `merlion model <provider:model>` keeps the silent set, but follow-prompts for the API key only if its env var is missing | `merlion-cli/src/model_cmd.rs` | 0.15h | ✅ |
+| 12.4 | `setup::run` rewired to the same catalog menu (was free-text Input). Single source of truth | `merlion-cli/src/setup.rs` | 0.15h | ✅ |
+| 12.5 | Tests: every catalog prefix round-trips through `Config::resolve_provider`; every entry has ≥1 model; first model matches existing `default_model_for` so defaults don't shift silently | `merlion-cli/src/setup.rs` | 0.2h | ✅ |
+
+**Deliberately out of scope:** the OAuth/Nous-portal login branch
+(`hermes model --portal-url …`) — that's Nous-internal infrastructure.
+The catalog model lists will go stale (frontier providers ship a new
+model every few weeks); users can always pick "Enter custom…" or use
+`merlion model <provider:model>` to override.
+
+**Acceptance:** `merlion model` (no arg) launches a TUI picker that
+matches hermes's shape. `merlion model anthropic:claude-opus-4-7`
+silently switches without prompting if `ANTHROPIC_API_KEY` is already
+set, and prompts for it otherwise. `merlion setup` first-run flow uses
+the same picker.
+
+---
+
 ## Summary — remaining work to v1
 
 Adding up the unchecked items:
