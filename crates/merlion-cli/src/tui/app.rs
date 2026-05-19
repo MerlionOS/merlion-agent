@@ -665,11 +665,9 @@ fn handle_running_key(app: &mut App, key: KeyEvent) {
                 app.user_scrolled = false;
             }
         }
-        KeyCode::Esc => {
-            if app.user_scrolled {
-                app.scroll = 0;
-                app.user_scrolled = false;
-            }
+        KeyCode::Esc if app.user_scrolled => {
+            app.scroll = 0;
+            app.user_scrolled = false;
         }
         _ => {}
     }
