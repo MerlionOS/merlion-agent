@@ -270,6 +270,34 @@ switching), `dump`, `debug`, `webhook`, `uninstall`.
 
 ---
 
+## Phase 11 — Gateway service lifecycle (v0.1.3, ≈1.5 session hours)
+
+`hermes gateway status` reports on an installed background daemon
+(launchd plist / systemd unit, with PID, last exit, and log paths).
+`merlion gateway` shipped foreground-only through v0.1.2. Close that gap.
+
+### Subcommands
+
+| # | Subcommand | Files | Est. | Status |
+|---|---|---|---|---|
+| 11.1 | `gateway run` (rename of old foreground `start`) | `merlion-cli/src/main.rs` | 0.05h | ✅ |
+| 11.2 | `gateway install` — write launchd plist or systemd --user unit and bootstrap/enable | `merlion-cli/src/gateway_service.rs` | 0.5h | ✅ |
+| 11.3 | `gateway uninstall` — bootout/disable and remove | `merlion-cli/src/gateway_service.rs` | 0.15h | ✅ |
+| 11.4 | `gateway start` / `stop` / `restart` for the installed service. `stop` is idempotent (launchctl exit 3 = no-op) | `merlion-cli/src/gateway_service.rs` | 0.3h | ✅ |
+| 11.5 | `gateway logs [-f] [--errors] [-n N]` — tail `~/.merlion/logs/gateway{,.error}.log` | `merlion-cli/src/main.rs` | 0.15h | ✅ |
+| 11.6 | `gateway status` enhanced: env-var matrix + service state (path, PID, last exit, log files); top-level `merlion status` also gets a service-state line | `merlion-cli/src/main.rs` + `gateway_service.rs` | 0.25h | ✅ |
+| 11.7 | macOS launchd backend (`launchctl bootstrap/bootout/kickstart/kill/print`) + Linux systemd `--user` backend (`systemctl --user enable/start/stop/restart/show`) | `gateway_service.rs` | included above | ✅ |
+| 11.8 | Plist + unit-file generators with unit tests; `current_exe()` baked into ProgramArguments/ExecStart so reinstalls track the binary that ran `install` | `gateway_service.rs` | included above | ✅ |
+
+**Acceptance:** end-to-end on macOS — `merlion gateway install` writes
+`~/Library/LaunchAgents/ai.merlion.gateway.plist`, `launchctl print
+gui/<uid>/ai.merlion.gateway` shows it running with the merlion binary as
+the program; `merlion gateway status` reports running + PID; `stop` /
+`start` / `restart` / `uninstall` round-trip cleanly. Tokens are picked up
+from `~/.merlion/.env` since launchd does not inherit the user shell env.
+
+---
+
 ## Summary — remaining work to v1
 
 Adding up the unchecked items:
