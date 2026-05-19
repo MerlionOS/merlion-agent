@@ -137,10 +137,7 @@ async fn read_sse_response(resp: reqwest::Response, want_id: u64) -> Result<Resp
         let chunk = chunk.map_err(|e| Error::Transport(format!("sse chunk: {e}")))?;
         buf.extend_from_slice(&chunk);
 
-        loop {
-            let Some(boundary) = find_event_boundary(&buf) else {
-                break;
-            };
+        while let Some(boundary) = find_event_boundary(&buf) {
             let raw_event = buf.drain(..boundary.end).collect::<Vec<u8>>();
             let event_text = &raw_event[..boundary.event_len];
             let data = extract_data(event_text);

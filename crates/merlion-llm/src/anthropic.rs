@@ -323,15 +323,13 @@ where
                                 finished = true;
                             }
                         }
-                        "message_stop" => {
-                            if !finished {
-                                if !tool_calls_out.is_empty() {
-                                    let calls = std::mem::take(&mut tool_calls_out);
-                                    yield Ok(LlmStreamEvent::ToolCalls(calls));
-                                }
-                                yield Ok(LlmStreamEvent::Done(None));
-                                finished = true;
+                        "message_stop" if !finished => {
+                            if !tool_calls_out.is_empty() {
+                                let calls = std::mem::take(&mut tool_calls_out);
+                                yield Ok(LlmStreamEvent::ToolCalls(calls));
                             }
+                            yield Ok(LlmStreamEvent::Done(None));
+                            finished = true;
                         }
                         "error" => {
                             let msg = parsed.get("error")
