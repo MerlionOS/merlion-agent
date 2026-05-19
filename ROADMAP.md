@@ -39,7 +39,7 @@ all 5 tools, persist sessions across runs, and search prior conversations.
 | 1.1 | Anthropic `/v1/messages` adapter | `crates/merlion-llm/src/anthropic.rs` | 2h | ✅ |
 | 1.2 | Gemini `streamGenerateContent` adapter | `crates/merlion-llm/src/gemini.rs` | 2h | ✅ |
 | 1.3 | Usage/cost accounting in `LlmResponse` + per-turn TUI footer | `merlion-core/src/llm.rs`, `merlion-cli/src/tui/render.rs` | 1h | ✅ |
-| 1.4 | Retry with exponential backoff on 429/5xx | `merlion-llm/src/retry.rs` | 1h | ⬜️ |
+| 1.4 | Retry with exponential backoff on 429/5xx | `merlion-llm/src/retry.rs` | 1h | ✅ |
 | 1.5 | AWS Bedrock passthrough (hand-rolled SigV4, Anthropic-on-Bedrock) | `merlion-llm/src/bedrock.rs` | 2h | ✅ |
 | 1.6 | Google Vertex passthrough (gcloud auth + Gemini wire) | `merlion-llm/src/vertex.rs` | 1h | ✅ |
 
@@ -58,11 +58,11 @@ agent actually complete coding tasks autonomously.
 | 2.1 | `grep` (ripgrep-backed, POSIX `grep -rn` fallback) | `merlion-tools/src/grep.rs` | 1h | ✅ |
 | 2.2 | `glob` (uses the `glob` crate, capped results) | `merlion-tools/src/glob.rs` | 0.5h | ✅ |
 | 2.3 | `web_fetch` (reqwest + html2text, 256 KiB cap) | `merlion-tools/src/web_fetch.rs` | 1h | ✅ |
-| 2.4 | `web_search` pluggable backend (Brave / Tavily / SerpAPI) | `merlion-tools/src/web_search.rs` | 1.5h | ⬜️ |
+| 2.4 | `web_search` tool (Tavily backend) | `merlion-tools/src/web_search.rs` | 1.5h | ✅ |
 | 2.5 | `task` — spawn a subagent with isolated message list + tools | `merlion-tools/src/task.rs` | 2h | ✅ |
 | 2.6 | `ToolApprover` trait in core; CLI implements console prompter | `merlion-core/src/approval.rs`, `merlion-cli/src/approver.rs` | 1h | ✅ |
 | 2.7 | "Always allow" approval persisted to `~/.merlion/approvals.yaml` | `merlion-cli/src/approver.rs` | 0.5h | ✅ |
-| 2.8 | Tool-result truncation + overflow to `~/.merlion/tool_results/<id>` | `merlion-tools/src/storage.rs` | 0.5h | ⬜️ |
+| 2.8 | Tool-result truncation (`max_tool_result_chars` in `AgentOptions`, default 16 KiB). Disk overflow deferred — truncation alone covers the model-context-bloat goal | `merlion-core/src/agent.rs` | 0.5h | ✅ |
 
 **Acceptance:** the agent can search a repo with `grep`, find files with
 `glob`, fetch a URL, search the web, delegate a side-quest to a subagent, and
