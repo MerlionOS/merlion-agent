@@ -225,11 +225,48 @@ handful are the difference between "shipped" and "actually useful daily."
 ~/.zshrc` enables tab-complete; `merlion setup` walks a first-time user
 from zero to working `merlion doctor`.
 
-**Out of scope for v0.1.1** (deferred): `kanban`, `webhook`, `lsp`, `acp`,
-`dashboard`, `computer-use`, `whatsapp/slack` setup helpers, `dump`,
-`debug`, `claw`, `plugins`, `profile`, `insights`, `checkpoints`, `auth
-login`, `pairing`, `backup/import`. Each is its own project; revisit if
-real usage demands.
+---
+
+## Phase 10 — Parity-on-the-useful-subset (v0.1.2, ≈3 session hours)
+
+After v0.1.1 shipped, the `hermes --help` vs `merlion --help` diff still
+shows hermes has 14 top-level flags (we have 4) and a few more subcommands
+worth porting. Close the gap on what's high-leverage; explicitly leave
+niche items deferred.
+
+### Top-level flags (5)
+
+| # | Flag | Why | Files | Est. | Status |
+|---|---|---|---|---|---|
+| 10.1 | `-m/--model MODEL` per-invocation override | `merlion -z "x" -m anthropic:claude-sonnet-4` without editing config | `merlion-cli/src/main.rs` | 0.25h | ⬜️ |
+| 10.2 | `--provider PROVIDER` per-invocation override | Pair with 10.1; lets `-z` use a non-default provider | `merlion-cli/src/main.rs` | 0.15h | ⬜️ |
+| 10.3 | `-s/--skills SKILLS` preload | Inject a skill body before the first user turn: `merlion -z "review" -s code-review` | `merlion-cli/src/main.rs` | 0.5h | ⬜️ |
+| 10.4 | `--resume <ID>` top-level | Symmetric with `-c`: `merlion --resume abc123` works without `chat` subcommand | `merlion-cli/src/main.rs` | 0.15h | ⬜️ |
+| 10.5 | `--yolo` flag (alias for `MERLION_AUTO_APPROVE=1`) | Discoverable; matches hermes's name | `merlion-cli/src/main.rs` | 0.1h | ⬜️ |
+
+### Subcommands (3)
+
+| # | Subcommand | Files | Est. | Status |
+|---|---|---|---|---|
+| 10.6 | `fallback {list,add,remove,clear}` — provider chain for 429/5xx retries | `merlion-cli/src/fallback_cmd.rs` + `merlion-config` | 1h | ⬜️ |
+| 10.7 | `auth {list,add,remove,reset}` — manage pooled API keys in `~/.merlion/auth.yaml` | `merlion-cli/src/auth_cmd.rs` | 0.75h | ⬜️ |
+| 10.8 | `backup` / `import` — tar.gz of `~/.merlion/` for transfer | `merlion-cli/src/backup_cmd.rs` | 0.5h | ⬜️ |
+
+### Cosmetic fix
+
+| # | Item | Status |
+|---|---|---|
+| 10.9 | `Gateway` doc: "Telegram + Discord" → "Telegram + Discord + Slack" | ⬜️ |
+
+**Acceptance:** `merlion --help` shows 8 top-level flags and ~19 subcommands;
+`merlion -z "..." -m anthropic:claude-sonnet-4 -s code-review` runs as a
+fully-overridden one-shot; `merlion fallback add openrouter:claude-sonnet-4`
+configures a fallback chain that kicks in when the primary 429s.
+
+**Still out of scope for v0.1.2** (defer further): `whatsapp`, `kanban`,
+`dashboard`, `computer-use`, `lsp`, `acp`, `profile`, `insights`, `claw`,
+`plugins`, `checkpoints`, `hooks`, `pairing` (CLI), `memory` (provider
+switching), `dump`, `debug`, `webhook`, `uninstall`.
 
 ---
 
