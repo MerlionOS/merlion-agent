@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Pre-push: run the full test suite so we don't push CI-bouncing commits.
+#
+# Pre-commit handles fmt + clippy (fast, every commit). This hook handles
+# the slow check (cargo test) only at push time.
+#
+# Install: run `scripts/install-hooks.sh` once per checkout.
+# Bypass:  git push --no-verify   (rarely justified)
+
+set -e
+
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "pre-push: cargo not on PATH — skipping tests" >&2
+  exit 0
+fi
+
+echo "pre-push: cargo test --workspace"
+cargo test --workspace --no-fail-fast

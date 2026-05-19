@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Pre-commit: fast checks that should never block on test runtime.
+#
+# Catches the two regressions that have bitten us repeatedly:
+#   1. cargo fmt drift
+#   2. cargo clippy lints
+#
+# Slow checks (test suite) live in pre-push instead.
+#
+# Install: run `scripts/install-hooks.sh` once per checkout.
+# Bypass:  git commit --no-verify   (rarely justified)
+
+set -e
+
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "pre-commit: cargo not on PATH — skipping checks" >&2
+  exit 0
+fi
+
+echo "pre-commit: cargo fmt --check"
+cargo fmt --all --check
+
+echo "pre-commit: cargo clippy"
+cargo clippy --workspace --all-targets -- -D warnings

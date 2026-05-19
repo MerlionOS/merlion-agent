@@ -23,6 +23,18 @@ cargo test --workspace
 
 Tests must pass before any commit. If you add a feature, add a test for it.
 
+**Git hooks** — run once per checkout:
+
+```bash
+scripts/install-hooks.sh
+```
+
+That points `core.hooksPath` at the tracked `.githooks/` dir, which adds:
+- `pre-commit`: `cargo fmt --check` + `cargo clippy -D warnings`
+- `pre-push`: `cargo test --workspace`
+
+Bypass with `--no-verify` if you have a good reason.
+
 ## Workspace layout
 
 8 crates, ordered by dependency depth (low to high):
