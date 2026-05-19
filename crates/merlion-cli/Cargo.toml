@@ -34,10 +34,13 @@ merlion-gateway.workspace = true
 merlion-cron.workspace = true
 anyhow.workspace = true
 clap.workspace = true
+clap_complete = "4"
 tokio = { workspace = true, features = ["full"] }
 async-trait.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+tracing-appender = "0.2"
+humantime = "2"
 rustyline.workspace = true
 uuid.workspace = true
 chrono.workspace = true
@@ -49,6 +52,7 @@ reqwest = { workspace = true, features = ["json"] }
 dirs.workspace = true
 ratatui = "0.28"
 crossterm = { version = "0.28", features = ["event-stream"] }
+dialoguer = "0.11"
 tempfile = "3"
 
 [dev-dependencies]

@@ -17,9 +17,14 @@ use merlion_session::SessionDB;
 use merlion_skills::SkillSet;
 use merlion_tools::skill_tools::SkillToolsConfig;
 use tokio::sync::mpsc;
-use tracing_subscriber::EnvFilter;
 
 mod approver;
+mod completion;
+mod curator_cmd;
+mod logs;
+mod setup;
+mod skills_cmd;
+mod tools_cmd;
 mod tui;
 
 #[derive(Debug, Parser)]
@@ -29,6 +34,19 @@ mod tui;
     about = "Merlion Agent — Rust port of hermes-agent"
 )]
 struct Cli {
+    /// One-shot mode: run a single prompt and print ONLY the final response
+    /// text to stdout. No banner, no spinner, no tool previews. Tools and
+    /// approval auto-bypass. Designed for shell pipelines:
+    ///   `git diff | merlion -z "review this"`
+    /// Reads stdin and appends to the prompt when stdin is not a TTY.
+    #[arg(short = 'z', long = "oneshot", value_name = "PROMPT", global = true)]
+    oneshot: Option<String>,
+
+    /// Resume the most recently-active session (works with `chat`, `-z`, or
+    /// no subcommand).
+    #[arg(short = 'c', long = "continue", global = true)]
+    continue_recent: bool,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -57,8 +75,21 @@ enum Command {
         #[command(subcommand)]
         action: Option<ConfigAction>,
     },
-    /// Diagnose configuration and credentials.
+    /// Diagnose configuration and credentials. Alias: `status`.
+    #[command(alias = "status")]
     Doctor,
+    /// Interactive first-run wizard. Walks you through picking a provider,
+    /// model, API key, and optional system prompt; writes ~/.merlion/config.yaml
+    /// and ~/.merlion/.env.
+    Setup,
+    /// Print version info (same as `--version`).
+    Version,
+    /// Emit a shell-completion script to stdout.
+    /// Example: `merlion completion zsh >> ~/.zshrc`
+    Completion {
+        /// Target shell: bash, zsh, fish, powershell, or elvish.
+        shell: clap_complete::Shell,
+    },
     /// List or search past sessions.
     Sessions {
         #[command(subcommand)]
@@ -86,6 +117,36 @@ enum Command {
         /// running process exits after a successful swap.
         #[arg(long)]
         apply: bool,
+    },
+    /// Tail merlion's on-disk log files in `~/.merlion/logs/`.
+    Logs {
+        /// Follow the file like `tail -F` (Unix only).
+        #[arg(short, long)]
+        follow: bool,
+        /// Show errors.log (WARN+) instead of agent.log (INFO+).
+        #[arg(long)]
+        errors: bool,
+        /// Only show entries newer than this duration. e.g. `1h`, `10m`.
+        #[arg(long)]
+        since: Option<String>,
+        /// How many lines from the tail to show. Default 50.
+        #[arg(short = 'n', long, default_value_t = 50)]
+        lines: usize,
+    },
+    /// Manage user-installed skills under `~/.merlion/skills/`.
+    Skills {
+        #[command(subcommand)]
+        action: skills_cmd::SkillsAction,
+    },
+    /// Inspect available tools.
+    Tools {
+        #[command(subcommand)]
+        action: tools_cmd::ToolsAction,
+    },
+    /// Inspect / pause / nudge the memory curator.
+    Curator {
+        #[command(subcommand)]
+        action: curator_cmd::CuratorAction,
     },
 }
 
@@ -177,19 +238,27 @@ enum SessionsAction {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_env("MERLION_LOG").unwrap_or_else(|_| EnvFilter::new("warn")),
-        )
-        .with_writer(std::io::stderr)
-        .compact()
-        .init();
+    let _guard = logs::init_with_files()?;
 
     let cli = Cli::parse();
     let cfg = merlion_config::load().context("loading config")?;
 
+    // -z/--oneshot short-circuits everything else: ignore the subcommand
+    // (if any), run a single agent turn, print the assistant's final text
+    // to stdout, exit.
+    if let Some(prompt) = cli.oneshot.clone() {
+        return oneshot_cmd(cfg, prompt, cli.continue_recent).await;
+    }
+
+    // --continue resolves "most recent session" once and is fed to chat().
+    let resume_session = if cli.continue_recent {
+        Some(most_recent_session_id()?)
+    } else {
+        None
+    };
+
     match cli.command.unwrap_or(Command::Chat {
-        session: None,
+        session: resume_session.clone(),
         tui: false,
         no_tui: false,
     }) {
@@ -197,16 +266,54 @@ async fn main() -> Result<()> {
             session,
             tui,
             no_tui,
-        } => chat(cfg, session, tui, no_tui).await,
+        } => {
+            let session = session.or(resume_session);
+            chat(cfg, session, tui, no_tui).await
+        }
         Command::Model { id } => model_cmd(cfg, id),
         Command::Config { action } => config_cmd(cfg, action),
         Command::Doctor => doctor(cfg),
+        Command::Setup => setup::run().await,
+        Command::Version => {
+            println!("merlion-agent {}", env!("CARGO_PKG_VERSION"));
+            Ok(())
+        }
         Command::Sessions { action } => sessions_cmd(action),
         Command::Mcp { action } => mcp_cmd(action).await,
         Command::Gateway { action } => gateway_cmd(cfg, action).await,
         Command::Cron { action } => cron_cmd(cfg, action).await,
         Command::Update { apply } => update_cmd(apply).await,
+        Command::Completion { shell } => {
+            completion::emit::<Cli>(shell, "merlion", &mut std::io::stdout());
+            Ok(())
+        }
+        Command::Logs {
+            follow,
+            errors,
+            since,
+            lines,
+        } => {
+            logs::run(logs::LogsArgs {
+                follow,
+                errors,
+                since,
+                lines,
+            })
+            .await
+        }
+        Command::Skills { action } => skills_cmd::run(action).await,
+        Command::Tools { action } => tools_cmd::run(action).await,
+        Command::Curator { action } => curator_cmd::run(action).await,
     }
+}
+
+fn most_recent_session_id() -> Result<String> {
+    let db = SessionDB::open_default()?;
+    let rows = db.list_sessions(1)?;
+    rows.into_iter()
+        .next()
+        .map(|r| r.id)
+        .ok_or_else(|| anyhow::anyhow!("no sessions to continue — start one with `merlion`"))
 }
 
 async fn update_cmd(apply: bool) -> Result<()> {
@@ -746,8 +853,11 @@ async fn gateway_cmd(cfg: Config, action: GatewayAction) -> Result<()> {
         GatewayAction::Status => {
             let tg_tok = std::env::var("TELEGRAM_BOT_TOKEN").is_ok();
             let dc_tok = std::env::var("DISCORD_BOT_TOKEN").is_ok();
+            let sk_app = std::env::var("SLACK_APP_TOKEN").is_ok();
+            let sk_bot = std::env::var("SLACK_BOT_TOKEN").is_ok();
             let tg_allow = std::env::var("MERLION_GATEWAY_ALLOW_TELEGRAM").is_ok();
             let dc_allow = std::env::var("MERLION_GATEWAY_ALLOW_DISCORD").is_ok();
+            let sk_allow = std::env::var("MERLION_GATEWAY_ALLOW_SLACK").is_ok();
             let allow_all = std::env::var("MERLION_GATEWAY_ALLOW_ALL").is_ok();
             println!("Telegram:");
             println!("  TELEGRAM_BOT_TOKEN               {}", yes_no(tg_tok));
@@ -760,6 +870,13 @@ async fn gateway_cmd(cfg: Config, action: GatewayAction) -> Result<()> {
             println!(
                 "  MERLION_GATEWAY_ALLOW_DISCORD    {}",
                 yes_no(dc_allow || allow_all)
+            );
+            println!("Slack:");
+            println!("  SLACK_APP_TOKEN                  {}", yes_no(sk_app));
+            println!("  SLACK_BOT_TOKEN                  {}", yes_no(sk_bot));
+            println!(
+                "  MERLION_GATEWAY_ALLOW_SLACK      {}",
+                yes_no(sk_allow || allow_all)
             );
             println!();
             println!("Set `MERLION_GATEWAY_ALLOW_ALL=1` to admit any user (development only).");
@@ -1100,6 +1217,117 @@ async fn deliver_cron_result(destination: &str, job_name: &str, reply: &str) -> 
             "unknown cron destination `{destination}` — use `cli`, `telegram:<chat_id>`, or `discord:<channel_id>`"
         )
     }
+}
+
+/// Script-friendly one-shot mode: `merlion -z "prompt"`. Reads stdin (if
+/// not a TTY) and appends to the prompt — enables shell pipelines like
+/// `git diff | merlion -z "review this"`. Prints ONLY the final assistant
+/// text to stdout (no banner, no spinner, no tool previews). Exits 0 on
+/// success, non-zero if the agent loop errored.
+async fn oneshot_cmd(cfg: Config, prompt: String, continue_recent: bool) -> Result<()> {
+    use std::io::Read as _;
+
+    // Read piped stdin if any.
+    let mut full_prompt = prompt;
+    if !std::io::stdin().is_terminal() {
+        let mut stdin = String::new();
+        std::io::stdin().read_to_string(&mut stdin)?;
+        if !stdin.trim().is_empty() {
+            full_prompt.push_str("\n\n---\n");
+            full_prompt.push_str(&stdin);
+        }
+    }
+
+    let provider = cfg.resolve_provider()?;
+    let api_key = std::env::var(&provider.api_key_env).ok();
+    let llm: Arc<dyn LlmClient> = match provider.wire {
+        Wire::OpenAi => Arc::new(OpenAiClient::new(provider.base_url.clone(), api_key)?),
+        Wire::Anthropic => Arc::new(AnthropicClient::new(provider.base_url.clone(), api_key)?),
+        Wire::Gemini => Arc::new(GeminiClient::new(provider.base_url.clone(), api_key)?),
+        Wire::Bedrock => Arc::new(BedrockClient::from_env()?),
+        Wire::Vertex => Arc::new(VertexClient::from_env()?),
+    };
+
+    let mut tools = ToolRegistry::new();
+    merlion_tools::register_defaults(&mut tools);
+    let memory_store = Arc::new(MemoryStore::open(
+        merlion_config::merlion_home().join("memory"),
+    )?);
+    merlion_tools::register_memory(&mut tools, memory_store.clone());
+
+    let options = AgentOptions {
+        model: provider.model.clone(),
+        temperature: cfg.model.temperature,
+        max_tokens: cfg.model.max_tokens,
+        max_iterations: cfg.max_iterations,
+        ..AgentOptions::default()
+    };
+    // -z mode is for scripts; bypass approval prompts.
+    let approver: Arc<dyn ToolApprover> = Arc::new(merlion_core::AllowAllApprover);
+    let agent = Agent::new(llm, tools, options).with_approver(approver);
+
+    // Load or initialize the conversation.
+    let db = SessionDB::open_default()?;
+    let session_id = if continue_recent {
+        most_recent_session_id()?
+    } else {
+        let id = uuid::Uuid::new_v4().to_string();
+        db.create_session(&id, None)?;
+        id
+    };
+    let mut messages = db.load_messages(&session_id)?;
+    if messages.is_empty() {
+        let sys = Message::system(default_oneshot_system_prompt(&cfg));
+        db.append_message(&session_id, &sys)?;
+        messages.push(sys);
+    }
+    let user_msg = Message::user(full_prompt);
+    db.append_message(&session_id, &user_msg)?;
+    messages.push(user_msg);
+
+    // Run the agent. Drain events, concatenate assistant text.
+    let (tx, mut rx) = mpsc::channel::<AgentEvent>(64);
+    let mut snapshot = messages.clone();
+    let run_fut = async {
+        let res = agent.run(&mut snapshot, tx).await;
+        (res, snapshot)
+    };
+    let render_fut = async {
+        let mut buf = String::new();
+        while let Some(ev) = rx.recv().await {
+            if let AgentEvent::AssistantMessage(m) = ev {
+                if let Some(c) = m.content {
+                    if !c.is_empty() {
+                        buf.push_str(&c);
+                    }
+                }
+            }
+        }
+        buf
+    };
+    let ((res, new_messages), reply) = tokio::join!(run_fut, render_fut);
+
+    for m in new_messages.iter().skip(messages.len()) {
+        db.append_message(&session_id, m)?;
+    }
+    if let Err(e) = res {
+        eprintln!("error: {e}");
+        std::process::exit(1);
+    }
+    print!("{}", reply);
+    if !reply.ends_with('\n') {
+        println!();
+    }
+    Ok(())
+}
+
+fn default_oneshot_system_prompt(cfg: &Config) -> String {
+    cfg.system_prompt.clone().unwrap_or_else(|| {
+        "You are Merlion in script mode. Be concise. Output only the answer — \
+         no preambles, no closing pleasantries. Tools and approval are auto-\
+         bypassed."
+            .into()
+    })
 }
 
 async fn chat(cfg: Config, resume: Option<String>, want_tui: bool, no_tui: bool) -> Result<()> {

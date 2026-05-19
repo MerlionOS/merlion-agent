@@ -209,16 +209,16 @@ handful are the difference between "shipped" and "actually useful daily."
 
 | # | Deliverable | Files | Est. | Status |
 |---|---|---|---|---|
-| 9.1 | `-z/--oneshot PROMPT` top-level flag — pipe-friendly: `git diff \| merlion -z "review"` | `merlion-cli/src/main.rs` | 0.5h | ⬜️ |
-| 9.2 | `--continue` / `-c` to resume the most-recent session | `merlion-cli/src/main.rs`, `merlion-session` | 0.25h | ⬜️ |
-| 9.3 | `status` alias for `doctor` + add Slack to `gateway status` | `merlion-cli/src/main.rs` | 0.1h | ⬜️ |
-| 9.4 | `completion {bash,zsh,fish,powershell}` subcommand (clap_complete) | `merlion-cli/src/completion.rs` | 0.25h | ⬜️ |
-| 9.5 | `logs` subcommand + actual log-file emission to `~/.merlion/logs/` | `merlion-cli/src/logs.rs`, tracing setup | 0.75h | ⬜️ |
-| 9.6 | `setup` interactive wizard — pick provider, paste key, write config.yaml + .env | `merlion-cli/src/setup.rs` | 1h | ⬜️ |
-| 9.7 | `skills` subcommands — `list`, `show <name>`, `delete <name>` | `merlion-cli/src/skills_cmd.rs` | 0.5h | ⬜️ |
-| 9.8 | `version` subcommand (alongside `--version`) | `merlion-cli/src/main.rs` | 0.1h | ⬜️ |
-| 9.9 | `tools` subcommand — list registered tools + per-platform enable/disable | `merlion-cli/src/tools_cmd.rs` | 0.5h | ⬜️ |
-| 9.10 | `curator` subcommands — `status`, `pause`, `resume`, `run-now` | `merlion-cli/src/curator_cmd.rs` | 0.5h | ⬜️ |
+| 9.1 | `-z/--oneshot PROMPT` top-level flag — pipe-friendly: `git diff \| merlion -z "review"` | `merlion-cli/src/main.rs` | 0.5h | ✅ |
+| 9.2 | `--continue` / `-c` to resume the most-recent session | `merlion-cli/src/main.rs`, `merlion-session` | 0.25h | ✅ |
+| 9.3 | `status` alias for `doctor` + add Slack to `gateway status` | `merlion-cli/src/main.rs` | 0.1h | ✅ |
+| 9.4 | `completion {bash,zsh,fish,powershell}` subcommand (clap_complete) | `merlion-cli/src/completion.rs` | 0.25h | ✅ |
+| 9.5 | `logs` subcommand + actual log-file emission to `~/.merlion/logs/` | `merlion-cli/src/logs.rs`, tracing setup | 0.75h | ✅ |
+| 9.6 | `setup` interactive wizard — pick provider, paste key, write config.yaml + .env | `merlion-cli/src/setup.rs` | 1h | ✅ |
+| 9.7 | `skills` subcommands — `list`, `show <name>`, `delete <name>` | `merlion-cli/src/skills_cmd.rs` | 0.5h | ✅ |
+| 9.8 | `version` subcommand (alongside `--version`) | `merlion-cli/src/main.rs` | 0.1h | ✅ |
+| 9.9 | `tools` subcommand — list registered tools + per-platform enable/disable | `merlion-cli/src/tools_cmd.rs` | 0.5h | ✅ |
+| 9.10 | `curator` subcommands — `status`, `pause`, `resume`, `run-now` | `merlion-cli/src/curator_cmd.rs` | 0.5h | ✅ |
 
 **Acceptance:** `merlion --help` lists 15+ subcommands; `git diff | merlion
 -z "review this"` works as a unix pipeline; `merlion completion zsh >>
