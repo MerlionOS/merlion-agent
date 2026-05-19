@@ -25,11 +25,11 @@ class Merlion < Formula
   end
 
   def install
-    # The release workflow tars binaries as merlion-<target>/merlion, so
-    # glob into whichever subdir Homebrew extracted us into.
-    extracted = Dir["merlion-*/merlion"].first
-    odie "merlion binary not found in tarball" if extracted.nil?
-    bin.install extracted
+    # The release workflow tars binaries as merlion-<target>/merlion, but
+    # Homebrew auto-strips the single top-level directory at extraction
+    # time, so by the time we run we're already inside the merlion-<target>
+    # dir and the binary is at the staging root.
+    bin.install "merlion"
   end
 
   test do
