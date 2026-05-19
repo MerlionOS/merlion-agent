@@ -201,6 +201,38 @@ working binary; `merlion update` self-upgrades to the latest release.
 
 ---
 
+## Phase 9 — Daily-use polish (v0.1.1, ≈4 session hours)
+
+After v0.1.0 shipped, real-world use surfaced gaps versus hermes-agent's
+42-subcommand surface. Most of hermes's subcommands are niche, but a
+handful are the difference between "shipped" and "actually useful daily."
+
+| # | Deliverable | Files | Est. | Status |
+|---|---|---|---|---|
+| 9.1 | `-z/--oneshot PROMPT` top-level flag — pipe-friendly: `git diff \| merlion -z "review"` | `merlion-cli/src/main.rs` | 0.5h | ⬜️ |
+| 9.2 | `--continue` / `-c` to resume the most-recent session | `merlion-cli/src/main.rs`, `merlion-session` | 0.25h | ⬜️ |
+| 9.3 | `status` alias for `doctor` + add Slack to `gateway status` | `merlion-cli/src/main.rs` | 0.1h | ⬜️ |
+| 9.4 | `completion {bash,zsh,fish,powershell}` subcommand (clap_complete) | `merlion-cli/src/completion.rs` | 0.25h | ⬜️ |
+| 9.5 | `logs` subcommand + actual log-file emission to `~/.merlion/logs/` | `merlion-cli/src/logs.rs`, tracing setup | 0.75h | ⬜️ |
+| 9.6 | `setup` interactive wizard — pick provider, paste key, write config.yaml + .env | `merlion-cli/src/setup.rs` | 1h | ⬜️ |
+| 9.7 | `skills` subcommands — `list`, `show <name>`, `delete <name>` | `merlion-cli/src/skills_cmd.rs` | 0.5h | ⬜️ |
+| 9.8 | `version` subcommand (alongside `--version`) | `merlion-cli/src/main.rs` | 0.1h | ⬜️ |
+| 9.9 | `tools` subcommand — list registered tools + per-platform enable/disable | `merlion-cli/src/tools_cmd.rs` | 0.5h | ⬜️ |
+| 9.10 | `curator` subcommands — `status`, `pause`, `resume`, `run-now` | `merlion-cli/src/curator_cmd.rs` | 0.5h | ⬜️ |
+
+**Acceptance:** `merlion --help` lists 15+ subcommands; `git diff | merlion
+-z "review this"` works as a unix pipeline; `merlion completion zsh >>
+~/.zshrc` enables tab-complete; `merlion setup` walks a first-time user
+from zero to working `merlion doctor`.
+
+**Out of scope for v0.1.1** (deferred): `kanban`, `webhook`, `lsp`, `acp`,
+`dashboard`, `computer-use`, `whatsapp/slack` setup helpers, `dump`,
+`debug`, `claw`, `plugins`, `profile`, `insights`, `checkpoints`, `auth
+login`, `pairing`, `backup/import`. Each is its own project; revisit if
+real usage demands.
+
+---
+
 ## Summary — remaining work to v1
 
 Adding up the unchecked items:
