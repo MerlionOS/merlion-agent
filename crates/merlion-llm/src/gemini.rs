@@ -67,7 +67,10 @@ impl GeminiClient {
     }
 
     pub(crate) fn build_url(&self, model: &str) -> String {
-        format!("{}/models/{}:streamGenerateContent?alt=sse", self.base_url, model)
+        format!(
+            "{}/models/{}:streamGenerateContent?alt=sse",
+            self.base_url, model
+        )
     }
 
     pub(crate) fn build_body(&self, req: &LlmRequest) -> Value {
@@ -108,8 +111,14 @@ impl GeminiClient {
 /// we've seen in practice — `default` and `$schema` are the common offenders
 /// from our own tool schemas (e.g. `edit.replace_all` has `default: false`).
 pub(crate) fn sanitize_schema(mut v: Value) -> Value {
-    const BANNED: &[&str] =
-        &["default", "$schema", "examples", "$ref", "definitions", "additionalProperties"];
+    const BANNED: &[&str] = &[
+        "default",
+        "$schema",
+        "examples",
+        "$ref",
+        "definitions",
+        "additionalProperties",
+    ];
     fn walk(v: &mut Value, banned: &[&str]) {
         match v {
             Value::Object(map) => {
@@ -204,19 +213,15 @@ pub(crate) fn convert_messages(messages: &[Message]) -> (String, Vec<Value>) {
 
 #[async_trait]
 impl LlmClient for GeminiClient {
-    async fn stream(
-        &self,
-        req: LlmRequest,
-    ) -> Result<BoxStream<'static, Result<LlmStreamEvent>>> {
+    async fn stream(&self, req: LlmRequest) -> Result<BoxStream<'static, Result<LlmStreamEvent>>> {
         let url = self.build_url(&req.model);
         let body = self.build_body(&req);
         let headers = self.build_headers()?;
 
         let http = self.http.clone();
-        let resp = crate::retry::send_with_retry(|| {
-            http.post(&url).headers(headers.clone()).json(&body)
-        })
-        .await?;
+        let resp =
+            crate::retry::send_with_retry(|| http.post(&url).headers(headers.clone()).json(&body))
+                .await?;
 
         let stream = gemini_sse_to_events(resp.bytes_stream()).boxed();
         Ok(stream)
@@ -334,8 +339,11 @@ mod tests {
 
     #[test]
     fn system_messages_become_system_instruction() {
-        let msgs =
-            vec![Message::system("be brief"), Message::system("be kind"), Message::user("hi")];
+        let msgs = vec![
+            Message::system("be brief"),
+            Message::system("be kind"),
+            Message::user("hi"),
+        ];
         let (sys, out) = convert_messages(&msgs);
         assert_eq!(sys, "be brief\n\nbe kind");
         assert_eq!(out.len(), 1);
@@ -366,11 +374,29 @@ mod tests {
         let msgs = vec![
             Message::user("run two"),
             Message::assistant_tool_calls(vec![
-                ToolCall { id: "a".into(), name: "bash".into(), arguments: json!({"command": "ls"}) },
-                ToolCall { id: "b".into(), name: "bash".into(), arguments: json!({"command": "pwd"}) },
+                ToolCall {
+                    id: "a".into(),
+                    name: "bash".into(),
+                    arguments: json!({"command": "ls"}),
+                },
+                ToolCall {
+                    id: "b".into(),
+                    name: "bash".into(),
+                    arguments: json!({"command": "pwd"}),
+                },
             ]),
-            Message::tool_response(ToolResult { tool_call_id: "a".into(), name: "bash".into(), content: "x".into(), is_error: false }),
-            Message::tool_response(ToolResult { tool_call_id: "b".into(), name: "bash".into(), content: "y".into(), is_error: false }),
+            Message::tool_response(ToolResult {
+                tool_call_id: "a".into(),
+                name: "bash".into(),
+                content: "x".into(),
+                is_error: false,
+            }),
+            Message::tool_response(ToolResult {
+                tool_call_id: "b".into(),
+                name: "bash".into(),
+                content: "y".into(),
+                is_error: false,
+            }),
         ];
         let (_, out) = convert_messages(&msgs);
         let turn = out.last().unwrap();
@@ -403,7 +429,8 @@ mod tests {
 
     #[test]
     fn build_url_puts_model_in_path_with_sse_query() {
-        let client = GeminiClient::new("https://generativelanguage.googleapis.com/v1beta", None).unwrap();
+        let client =
+            GeminiClient::new("https://generativelanguage.googleapis.com/v1beta", None).unwrap();
         assert_eq!(
             client.build_url("gemini-2.0-flash"),
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse"
@@ -412,7 +439,11 @@ mod tests {
 
     #[test]
     fn build_body_carries_generation_config_and_drops_authorization_header() {
-        let client = GeminiClient::new("https://generativelanguage.googleapis.com/v1beta", Some("k".into())).unwrap();
+        let client = GeminiClient::new(
+            "https://generativelanguage.googleapis.com/v1beta",
+            Some("k".into()),
+        )
+        .unwrap();
         let req = LlmRequest {
             model: "gemini-2.0-flash".into(),
             messages: vec![Message::user("hi")],

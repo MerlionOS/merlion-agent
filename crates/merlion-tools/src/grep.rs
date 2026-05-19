@@ -209,7 +209,10 @@ mod tests {
             )
             .await;
         assert!(!res.is_error, "expected success, got: {}", res.content);
-        assert_ne!(res.content, "no matches", "should have found 'package' in Cargo.toml");
+        assert_ne!(
+            res.content, "no matches",
+            "should have found 'package' in Cargo.toml"
+        );
         assert!(
             res.content.contains("package"),
             "expected output to contain 'package', got: {}",
@@ -229,7 +232,11 @@ mod tests {
                 }),
             )
             .await;
-        assert!(!res.is_error, "no matches should not be an error: {}", res.content);
+        assert!(
+            !res.is_error,
+            "no matches should not be an error: {}",
+            res.content
+        );
         assert_eq!(res.content, "no matches");
     }
 

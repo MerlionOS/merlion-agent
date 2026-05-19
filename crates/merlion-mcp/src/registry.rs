@@ -120,7 +120,11 @@ impl McpRegistry {
 impl ServerEntry {
     pub fn stdio(command: impl Into<String>, args: Vec<String>) -> Self {
         Self {
-            transport: TransportSpec::Stdio { command: command.into(), args, env: Default::default() },
+            transport: TransportSpec::Stdio {
+                command: command.into(),
+                args,
+                env: Default::default(),
+            },
             enabled: true,
         }
     }
@@ -147,7 +151,11 @@ pub fn parse_stdio_command(s: &str) -> Result<TransportSpec> {
         .ok_or_else(|| Error::Other("empty command".into()))?
         .to_string();
     let args = parts.map(|s| s.to_string()).collect();
-    Ok(TransportSpec::Stdio { command, args, env: Default::default() })
+    Ok(TransportSpec::Stdio {
+        command,
+        args,
+        env: Default::default(),
+    })
 }
 
 #[cfg(test)]

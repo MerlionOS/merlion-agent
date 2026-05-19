@@ -76,15 +76,23 @@ impl JoinKeyStore {
             if !self.keys.contains_key(&candidate) {
                 self.keys.insert(
                     candidate.clone(),
-                    JoinKey { session_id: session_id.clone(), expires_at },
+                    JoinKey {
+                        session_id: session_id.clone(),
+                        expires_at,
+                    },
                 );
                 return candidate;
             }
         }
         // Pathological case — overwrite an arbitrary slot rather than loop forever.
         let candidate = generate_key(6);
-        self.keys
-            .insert(candidate.clone(), JoinKey { session_id, expires_at });
+        self.keys.insert(
+            candidate.clone(),
+            JoinKey {
+                session_id,
+                expires_at,
+            },
+        );
         candidate
     }
 
@@ -101,7 +109,8 @@ impl JoinKeyStore {
     }
 
     pub fn bind(&mut self, platform: &str, user_id: &str, session_id: String) {
-        self.bindings.insert(binding_key(platform, user_id), session_id);
+        self.bindings
+            .insert(binding_key(platform, user_id), session_id);
     }
 
     pub fn lookup_binding(&self, platform: &str, user_id: &str) -> Option<&str> {
@@ -134,7 +143,9 @@ fn generate_key(len: usize) -> String {
     // Nanosecond timestamp gives ~30 bits of entropy per call; we mix in
     // an additional source-of-instability (the address of a stack value)
     // to keep keys distinct under tight loops.
-    let stamp = now.timestamp_nanos_opt().unwrap_or_else(|| now.timestamp_micros());
+    let stamp = now
+        .timestamp_nanos_opt()
+        .unwrap_or_else(|| now.timestamp_micros());
     let mut state = (stamp as u64)
         .wrapping_mul(0x9E37_79B9_7F4A_7C15)
         .wrapping_add(&stamp as *const _ as u64);
@@ -202,7 +213,10 @@ mod tests {
         let mut store = JoinKeyStore::default();
         assert!(store.lookup_binding("telegram", "42").is_none());
         store.bind("telegram", "42", "session-shared".into());
-        assert_eq!(store.lookup_binding("telegram", "42"), Some("session-shared"));
+        assert_eq!(
+            store.lookup_binding("telegram", "42"),
+            Some("session-shared")
+        );
         // Another user / platform stays independent.
         assert!(store.lookup_binding("discord", "42").is_none());
         store.unbind("telegram", "42");

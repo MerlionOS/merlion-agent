@@ -100,7 +100,12 @@ impl App {
     }
 
     fn push_history(&mut self, line: String) {
-        if self.input_history.back().map(|s| s == &line).unwrap_or(false) {
+        if self
+            .input_history
+            .back()
+            .map(|s| s == &line)
+            .unwrap_or(false)
+        {
             return;
         }
         if self.input_history.len() >= 128 {
@@ -276,16 +281,15 @@ async fn run_loop(
                 if trimmed.is_empty() {
                     continue;
                 }
-                let user_text = match resolve_input(
-                    &mut app, &trimmed, agent, skills, messages, session_id,
-                ) {
-                    SubmitResolution::Local => {
-                        terminal.draw(|f| render::draw(f, &app))?;
-                        continue;
-                    }
-                    SubmitResolution::Quit => break,
-                    SubmitResolution::Send(t) => t,
-                };
+                let user_text =
+                    match resolve_input(&mut app, &trimmed, agent, skills, messages, session_id) {
+                        SubmitResolution::Local => {
+                            terminal.draw(|f| render::draw(f, &app))?;
+                            continue;
+                        }
+                        SubmitResolution::Quit => break,
+                        SubmitResolution::Send(t) => t,
+                    };
 
                 curator.record_user_turn();
                 let user_text = if let Some(nudge) = curator.nudge_if_due() {
@@ -298,7 +302,8 @@ async fn run_loop(
                 db.append_message(session_id, &user_msg)?;
                 messages.push(user_msg);
                 app.messages.push(RenderedTurn::UserText(user_text));
-                app.messages.push(RenderedTurn::AssistantText(String::new()));
+                app.messages
+                    .push(RenderedTurn::AssistantText(String::new()));
                 app.status = "thinking…".into();
                 app.agent_running = true;
                 app.pin_to_bottom();
@@ -449,8 +454,10 @@ fn handle_key_idle(app: &mut App, key: KeyEvent, skills: &SkillSet) -> KeyOutcom
                                 app.input = format!("/{lcp}");
                                 app.cursor = app.input.chars().count();
                             }
-                            app.status =
-                                format!("skills: {}", many.iter().copied().collect::<Vec<_>>().join(", "));
+                            app.status = format!(
+                                "skills: {}",
+                                many.iter().copied().collect::<Vec<_>>().join(", ")
+                            );
                         }
                     }
                 }
@@ -633,7 +640,8 @@ async fn run_agent(
     *messages = snapshot;
 
     if interrupted {
-        app.messages.push(RenderedTurn::Info("[interrupted]".into()));
+        app.messages
+            .push(RenderedTurn::Info("[interrupted]".into()));
     } else if let Some(Err(e)) = run_result {
         app.messages.push(RenderedTurn::Info(format!("error: {e}")));
     }
@@ -681,7 +689,9 @@ pub fn handle_agent_event(app: &mut App, ev: AgentEvent) {
             app.pin_to_bottom();
         }
         AgentEvent::AssistantMessage(_) => {}
-        AgentEvent::ToolCallStart { name, arguments, .. } => {
+        AgentEvent::ToolCallStart {
+            name, arguments, ..
+        } => {
             app.status = format!("running tool: {name}");
             // Drop trailing empty assistant buffer.
             if let Some(RenderedTurn::AssistantText(buf)) = app.messages.last() {
@@ -698,7 +708,12 @@ pub fn handle_agent_event(app: &mut App, ev: AgentEvent) {
             });
             app.pin_to_bottom();
         }
-        AgentEvent::ToolCallFinish { name, content, is_error, .. } => {
+        AgentEvent::ToolCallFinish {
+            name,
+            content,
+            is_error,
+            ..
+        } => {
             for turn in app.messages.iter_mut().rev() {
                 if let RenderedTurn::ToolCall {
                     name: n,
@@ -717,7 +732,8 @@ pub fn handle_agent_event(app: &mut App, ev: AgentEvent) {
                 }
             }
             app.status = "thinking…".into();
-            app.messages.push(RenderedTurn::AssistantText(String::new()));
+            app.messages
+                .push(RenderedTurn::AssistantText(String::new()));
             app.pin_to_bottom();
         }
         AgentEvent::IterationBudgetExhausted => {
@@ -741,11 +757,11 @@ pub fn handle_agent_event(app: &mut App, ev: AgentEvent) {
     }
 }
 
-
-
 /// Longest common prefix among a slice of strings. Returns "" for empty input.
 fn longest_common_prefix(strs: &[&str]) -> String {
-    let Some(first) = strs.first() else { return String::new() };
+    let Some(first) = strs.first() else {
+        return String::new();
+    };
     let mut prefix: String = first.to_string();
     for s in &strs[1..] {
         while !s.starts_with(&prefix) {

@@ -8,7 +8,11 @@ async fn bash_echo_roundtrip() {
         .call("call_1", json!({ "command": "echo hello-merlion" }))
         .await;
     assert!(!r.is_error, "tool reported error: {}", r.content);
-    assert!(r.content.contains("hello-merlion"), "stdout missing: {}", r.content);
+    assert!(
+        r.content.contains("hello-merlion"),
+        "stdout missing: {}",
+        r.content
+    );
     assert_eq!(r.name, "bash");
     assert_eq!(r.tool_call_id, "call_1");
 }

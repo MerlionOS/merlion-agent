@@ -17,8 +17,14 @@ use merlion_core::{ApprovalDecision, ToolApprover};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-const SENSITIVE_TOOLS: &[&str] =
-    &["bash", "bash_docker", "bash_ssh", "write", "edit", "web_fetch"];
+const SENSITIVE_TOOLS: &[&str] = &[
+    "bash",
+    "bash_docker",
+    "bash_ssh",
+    "write",
+    "edit",
+    "web_fetch",
+];
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct ApprovalsFile {
@@ -72,8 +78,12 @@ impl ConsoleApprover {
         if !inserted {
             return;
         }
-        let Some(path) = self.persistence_path.as_deref() else { return };
-        let file = ApprovalsFile { always_allow: snapshot };
+        let Some(path) = self.persistence_path.as_deref() else {
+            return;
+        };
+        let file = ApprovalsFile {
+            always_allow: snapshot,
+        };
         if let Err(e) = save_approvals(path, &file) {
             tracing::warn!(error = %e, path = %path.display(), "could not persist approval");
         }
@@ -116,7 +126,9 @@ impl ToolApprover for ConsoleApprover {
 
         let mut line = String::new();
         if io::stdin().read_line(&mut line).is_err() {
-            return ApprovalDecision::Deny { reason: "could not read stdin".into() };
+            return ApprovalDecision::Deny {
+                reason: "could not read stdin".into(),
+            };
         }
         match line.trim().to_ascii_lowercase().as_str() {
             "y" | "yes" => ApprovalDecision::Allow,
@@ -124,7 +136,9 @@ impl ToolApprover for ConsoleApprover {
                 self.remember_always(tool_name);
                 ApprovalDecision::Allow
             }
-            _ => ApprovalDecision::Deny { reason: "user declined".into() },
+            _ => ApprovalDecision::Deny {
+                reason: "user declined".into(),
+            },
         }
     }
 }
@@ -177,10 +191,15 @@ mod tests {
     fn load_save_roundtrip() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("approvals.yaml");
-        let f = ApprovalsFile { always_allow: vec!["bash".into(), "write".into()] };
+        let f = ApprovalsFile {
+            always_allow: vec!["bash".into(), "write".into()],
+        };
         save_approvals(&path, &f).unwrap();
         let back = load_approvals(&path).unwrap();
-        assert_eq!(back.always_allow, vec!["bash".to_string(), "write".to_string()]);
+        assert_eq!(
+            back.always_allow,
+            vec!["bash".to_string(), "write".to_string()]
+        );
     }
 
     #[test]

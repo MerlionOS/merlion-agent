@@ -53,7 +53,11 @@ impl VertexClient {
             .build()
             .map_err(|e| Error::Llm(format!("http build: {e}")))?;
         let region = region.into();
-        let region = if region.is_empty() { DEFAULT_REGION.to_string() } else { region };
+        let region = if region.is_empty() {
+            DEFAULT_REGION.to_string()
+        } else {
+            region
+        };
         Ok(Self {
             http,
             project: project.into(),
@@ -189,8 +193,14 @@ pub fn build_body(req: &LlmRequest) -> Value {
 /// Strip JSON-schema keywords Vertex rejects. Same set as Gemini Studio —
 /// the underlying model accepts the same dialect.
 pub(crate) fn sanitize_schema(mut v: Value) -> Value {
-    const BANNED: &[&str] =
-        &["default", "$schema", "examples", "$ref", "definitions", "additionalProperties"];
+    const BANNED: &[&str] = &[
+        "default",
+        "$schema",
+        "examples",
+        "$ref",
+        "definitions",
+        "additionalProperties",
+    ];
     fn walk(v: &mut Value, banned: &[&str]) {
         match v {
             Value::Object(map) => {
@@ -281,10 +291,7 @@ pub(crate) fn convert_messages(messages: &[Message]) -> (String, Vec<Value>) {
 
 #[async_trait]
 impl LlmClient for VertexClient {
-    async fn stream(
-        &self,
-        req: LlmRequest,
-    ) -> Result<BoxStream<'static, Result<LlmStreamEvent>>> {
+    async fn stream(&self, req: LlmRequest) -> Result<BoxStream<'static, Result<LlmStreamEvent>>> {
         let token = self.acquire_token().await?;
         let url = self.build_url(&req.model);
         let body = self.build_body(&req);
@@ -297,10 +304,9 @@ impl LlmClient for VertexClient {
         headers.insert(AUTHORIZATION, auth);
 
         let http = self.http.clone();
-        let resp = crate::retry::send_with_retry(|| {
-            http.post(&url).headers(headers.clone()).json(&body)
-        })
-        .await?;
+        let resp =
+            crate::retry::send_with_retry(|| http.post(&url).headers(headers.clone()).json(&body))
+                .await?;
 
         let stream = vertex_sse_to_events(resp.bytes_stream()).boxed();
         Ok(stream)

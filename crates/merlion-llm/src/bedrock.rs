@@ -199,10 +199,7 @@ fn convert_messages(messages: &[Message]) -> (String, Vec<Value>) {
 
 #[async_trait]
 impl LlmClient for BedrockClient {
-    async fn stream(
-        &self,
-        req: LlmRequest,
-    ) -> Result<BoxStream<'static, Result<LlmStreamEvent>>> {
+    async fn stream(&self, req: LlmRequest) -> Result<BoxStream<'static, Result<LlmStreamEvent>>> {
         let url = self.invoke_url(&req.model);
         let path = format!("/model/{}/invoke", urlencode_model(&req.model));
         let body = build_invoke_body(&req);
@@ -273,8 +270,8 @@ impl LlmClient for BedrockClient {
             .bytes()
             .await
             .map_err(|e| Error::Llm(format!("bedrock body: {e}")))?;
-        let parsed: Value = serde_json::from_slice(&bytes)
-            .map_err(|e| Error::Llm(format!("bedrock json: {e}")))?;
+        let parsed: Value =
+            serde_json::from_slice(&bytes).map_err(|e| Error::Llm(format!("bedrock json: {e}")))?;
 
         let events = invoke_response_to_events(parsed);
         Ok(stream::iter(events.into_iter().map(Ok)).boxed())
@@ -405,11 +402,7 @@ impl<'a> SigV4Inputs<'a> {
             .iter()
             .map(|(k, v)| format!("{}:{}\n", k, v.trim()))
             .collect();
-        let signed_headers = signed
-            .iter()
-            .map(|(k, _)| *k)
-            .collect::<Vec<_>>()
-            .join(";");
+        let signed_headers = signed.iter().map(|(k, _)| *k).collect::<Vec<_>>().join(";");
 
         let canonical_request = format!(
             "{}\n{}\n{}\n{}\n{}\n{}",
@@ -463,8 +456,8 @@ fn hex_sha256(bytes: &[u8]) -> String {
 }
 
 fn hmac_sha256(key: &[u8], msg: &[u8]) -> Vec<u8> {
-    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(key)
-        .expect("HMAC accepts arbitrary-length keys");
+    let mut mac =
+        <Hmac<Sha256> as Mac>::new_from_slice(key).expect("HMAC accepts arbitrary-length keys");
     mac.update(msg);
     mac.finalize().into_bytes().to_vec()
 }

@@ -47,11 +47,10 @@ impl Tool for MemoryTool {
     fn schema(&self) -> ToolSchema {
         ToolSchema {
             name: "memory".into(),
-            description:
-                "Manage the agent's persistent memory store. Use this to remember things \
+            description: "Manage the agent's persistent memory store. Use this to remember things \
                  about the user, their projects, and their preferences across sessions. \
                  `action`: list | read | write | delete."
-                    .into(),
+                .into(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -104,7 +103,12 @@ fn dispatch(store: &MemoryStore, args: Args) -> Result<String, String> {
                 m.name, m.description, m.kind, m.updated_at, m.body
             ))
         }
-        Args::Write { name, description, body, kind } => {
+        Args::Write {
+            name,
+            description,
+            body,
+            kind,
+        } => {
             let kind = parse_kind(kind.as_deref())?;
             let now = Utc::now();
             let m = Memory {
@@ -138,9 +142,19 @@ fn parse_kind(s: Option<&str>) -> Result<MemoryType, String> {
 }
 
 fn ok(call_id: &str, content: String) -> ToolResult {
-    ToolResult { tool_call_id: call_id.into(), name: "memory".into(), content, is_error: false }
+    ToolResult {
+        tool_call_id: call_id.into(),
+        name: "memory".into(),
+        content,
+        is_error: false,
+    }
 }
 
 fn err(call_id: &str, msg: String) -> ToolResult {
-    ToolResult { tool_call_id: call_id.into(), name: "memory".into(), content: msg, is_error: true }
+    ToolResult {
+        tool_call_id: call_id.into(),
+        name: "memory".into(),
+        content: msg,
+        is_error: true,
+    }
 }

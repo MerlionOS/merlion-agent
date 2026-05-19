@@ -45,11 +45,10 @@ impl Tool for WebSearch {
     fn schema(&self) -> ToolSchema {
         ToolSchema {
             name: "web_search".into(),
-            description:
-                "Search the web and return a numbered list of titled snippets with URLs. \
+            description: "Search the web and return a numbered list of titled snippets with URLs. \
                  Use this before `web_fetch` when you don't know the exact URL. \
                  Requires TAVILY_API_KEY env var."
-                    .into(),
+                .into(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -71,12 +70,16 @@ impl Tool for WebSearch {
             Err(_) => {
                 return err(
                     call_id,
-                    "TAVILY_API_KEY is not set. Sign up at https://tavily.com and export the key.".into(),
+                    "TAVILY_API_KEY is not set. Sign up at https://tavily.com and export the key."
+                        .into(),
                 );
             }
         };
         let max = parsed.max_results.unwrap_or(5).min(20);
-        let client = match reqwest::Client::builder().timeout(Duration::from_secs(20)).build() {
+        let client = match reqwest::Client::builder()
+            .timeout(Duration::from_secs(20))
+            .build()
+        {
             Ok(c) => c,
             Err(e) => return err(call_id, format!("http client: {e}")),
         };
@@ -115,8 +118,13 @@ impl Tool for WebSearch {
         for (i, r) in parsed_resp.results.iter().enumerate() {
             let title = r.title.as_deref().unwrap_or("(untitled)");
             let url = r.url.as_deref().unwrap_or("");
-            let snippet =
-                r.content.as_deref().unwrap_or("").chars().take(400).collect::<String>();
+            let snippet = r
+                .content
+                .as_deref()
+                .unwrap_or("")
+                .chars()
+                .take(400)
+                .collect::<String>();
             out.push_str(&format!("{}. {title}\n   {url}\n   {snippet}\n\n", i + 1));
         }
         if out.is_empty() {
@@ -127,9 +135,19 @@ impl Tool for WebSearch {
 }
 
 fn ok(call_id: &str, content: String) -> ToolResult {
-    ToolResult { tool_call_id: call_id.into(), name: "web_search".into(), content, is_error: false }
+    ToolResult {
+        tool_call_id: call_id.into(),
+        name: "web_search".into(),
+        content,
+        is_error: false,
+    }
 }
 
 fn err(call_id: &str, msg: String) -> ToolResult {
-    ToolResult { tool_call_id: call_id.into(), name: "web_search".into(), content: msg, is_error: true }
+    ToolResult {
+        tool_call_id: call_id.into(),
+        name: "web_search".into(),
+        content: msg,
+        is_error: true,
+    }
 }

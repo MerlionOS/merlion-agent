@@ -98,8 +98,7 @@ async fn http_request_with_sse_response_parses() {
 
 #[tokio::test]
 async fn http_request_with_rpc_error_envelope_surfaces_as_rpc_error() {
-    let body =
-        r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"method not found"}}"#;
+    let body = r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"method not found"}}"#;
     let headers = format!(
         "Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n",
         body.len()

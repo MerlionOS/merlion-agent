@@ -44,30 +44,50 @@ impl Theme {
 
     fn dark() -> Self {
         Self {
-            user_text: Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            user_text: Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
             assistant_text: Style::default().fg(Color::White),
-            tool_call: Style::default().fg(Color::DarkGray).add_modifier(Modifier::DIM),
-            tool_ok: Style::default().fg(Color::Green).add_modifier(Modifier::DIM),
+            tool_call: Style::default()
+                .fg(Color::DarkGray)
+                .add_modifier(Modifier::DIM),
+            tool_ok: Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::DIM),
             tool_err: Style::default().fg(Color::Red).add_modifier(Modifier::DIM),
-            info: Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC),
+            info: Style::default()
+                .fg(Color::DarkGray)
+                .add_modifier(Modifier::ITALIC),
             status_idle: Style::default().fg(Color::DarkGray),
-            status_busy: Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
-            header: Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD),
+            status_busy: Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+            header: Style::default()
+                .fg(Color::Magenta)
+                .add_modifier(Modifier::BOLD),
             input_prompt: Style::default().fg(Color::Cyan),
         }
     }
 
     fn light() -> Self {
         Self {
-            user_text: Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD),
+            user_text: Style::default()
+                .fg(Color::Blue)
+                .add_modifier(Modifier::BOLD),
             assistant_text: Style::default().fg(Color::Black),
             tool_call: Style::default().fg(Color::Gray),
             tool_ok: Style::default().fg(Color::Green),
             tool_err: Style::default().fg(Color::Red),
-            info: Style::default().fg(Color::Gray).add_modifier(Modifier::ITALIC),
+            info: Style::default()
+                .fg(Color::Gray)
+                .add_modifier(Modifier::ITALIC),
             status_idle: Style::default().fg(Color::Gray),
-            status_busy: Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD),
-            header: Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD),
+            status_busy: Style::default()
+                .fg(Color::Magenta)
+                .add_modifier(Modifier::BOLD),
+            header: Style::default()
+                .fg(Color::Blue)
+                .add_modifier(Modifier::BOLD),
             input_prompt: Style::default().fg(Color::Blue),
         }
     }

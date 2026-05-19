@@ -21,7 +21,10 @@ impl Curator {
     /// Build a curator that nudges every `interval` user turns. A value of 0
     /// disables nudging entirely.
     pub fn new(interval: u32) -> Self {
-        Self { interval, turns_since_nudge: 0 }
+        Self {
+            interval,
+            turns_since_nudge: 0,
+        }
     }
 
     pub fn interval(&self) -> u32 {
@@ -64,8 +67,7 @@ impl Default for Curator {
     }
 }
 
-const DEFAULT_NUDGE: &str =
-    "Take a moment to reflect on the recent conversation: are there any \
+const DEFAULT_NUDGE: &str = "Take a moment to reflect on the recent conversation: are there any \
      facts about the user, their project, their preferences, or how they \
      like to work that would be valuable in a future session? If so, save \
      them to memory using the `memory` tool. Skip if there is nothing \

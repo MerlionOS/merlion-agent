@@ -130,19 +130,15 @@ fn message_to_json(m: &Message) -> Value {
 
 #[async_trait]
 impl LlmClient for OpenAiClient {
-    async fn stream(
-        &self,
-        req: LlmRequest,
-    ) -> Result<BoxStream<'static, Result<LlmStreamEvent>>> {
+    async fn stream(&self, req: LlmRequest) -> Result<BoxStream<'static, Result<LlmStreamEvent>>> {
         let url = format!("{}/chat/completions", self.base_url);
         let body = self.build_body(&req, true);
         let headers = self.build_headers()?;
 
         let http = self.http.clone();
-        let resp = crate::retry::send_with_retry(|| {
-            http.post(&url).headers(headers.clone()).json(&body)
-        })
-        .await?;
+        let resp =
+            crate::retry::send_with_retry(|| http.post(&url).headers(headers.clone()).json(&body))
+                .await?;
 
         let stream = sse_to_events(resp.bytes_stream()).boxed();
         Ok(stream)
@@ -264,7 +260,11 @@ impl PartialToolCall {
         } else {
             serde_json::from_str(&self.arguments).unwrap_or(Value::String(self.arguments))
         };
-        Some(ToolCall { id, name, arguments: args })
+        Some(ToolCall {
+            id,
+            name,
+            arguments: args,
+        })
     }
 }
 

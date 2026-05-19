@@ -64,7 +64,9 @@ async fn run_job_forever(job: Job, tx: mpsc::Sender<Job>) -> Result<()> {
             warn!(name = %job.name, "cron schedule yielded no future fire time; stopping job");
             return Ok(());
         };
-        let delay = (next - now).to_std().unwrap_or(std::time::Duration::from_secs(0));
+        let delay = (next - now)
+            .to_std()
+            .unwrap_or(std::time::Duration::from_secs(0));
         info!(name = %job.name, fires_at = %next, "sleeping until next cron fire");
         tokio::time::sleep(delay).await;
         if tx.send(job.clone()).await.is_err() {

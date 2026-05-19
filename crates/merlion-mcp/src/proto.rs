@@ -93,7 +93,9 @@ pub struct CallToolResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentItem {
-    Text { text: String },
+    Text {
+        text: String,
+    },
     /// Image / resource / etc — captured opaquely so unknown variants don't
     /// break the parse. The MVP only renders `text`; richer types come later.
     #[serde(other)]
@@ -182,9 +184,13 @@ mod tests {
     #[test]
     fn content_join_concatenates_text_and_notes_skipped_blocks() {
         let items = vec![
-            ContentItem::Text { text: "hello".into() },
+            ContentItem::Text {
+                text: "hello".into(),
+            },
             ContentItem::Other,
-            ContentItem::Text { text: "world".into() },
+            ContentItem::Text {
+                text: "world".into(),
+            },
         ];
         let s = ContentItem::join(&items);
         assert!(s.contains("hello") && s.contains("world"));

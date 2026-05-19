@@ -43,8 +43,17 @@ impl Default for AgentOptions {
 pub enum AgentEvent {
     AssistantDelta(String),
     AssistantMessage(Message),
-    ToolCallStart { id: String, name: String, arguments: serde_json::Value },
-    ToolCallFinish { id: String, name: String, content: String, is_error: bool },
+    ToolCallStart {
+        id: String,
+        name: String,
+        arguments: serde_json::Value,
+    },
+    ToolCallFinish {
+        id: String,
+        name: String,
+        content: String,
+        is_error: bool,
+    },
     Usage(Usage),
     IterationBudgetExhausted,
     Done,
@@ -61,7 +70,12 @@ pub struct Agent {
 
 impl Agent {
     pub fn new(llm: Arc<dyn LlmClient>, tools: ToolRegistry, options: AgentOptions) -> Self {
-        Self { llm, tools, options, approver: Arc::new(AllowAllApprover) }
+        Self {
+            llm,
+            tools,
+            options,
+            approver: Arc::new(AllowAllApprover),
+        }
     }
 
     /// Install a tool approver. Defaults to [`AllowAllApprover`] — replace
@@ -136,7 +150,9 @@ impl Agent {
                 }
             };
             messages.push(assistant_msg.clone());
-            let _ = events.send(AgentEvent::AssistantMessage(assistant_msg)).await;
+            let _ = events
+                .send(AgentEvent::AssistantMessage(assistant_msg))
+                .await;
 
             if tool_calls.is_empty() {
                 let _ = events.send(AgentEvent::Done).await;

@@ -21,7 +21,9 @@ pub struct SkillToolsConfig {
 
 impl SkillToolsConfig {
     pub fn new(skills_dir: impl Into<PathBuf>) -> Arc<Self> {
-        Arc::new(Self { skills_dir: skills_dir.into() })
+        Arc::new(Self {
+            skills_dir: skills_dir.into(),
+        })
     }
 }
 
@@ -65,11 +67,10 @@ impl Tool for SkillCreate {
     fn schema(&self) -> ToolSchema {
         ToolSchema {
             name: "skill_create".into(),
-            description:
-                "Create a new skill the user can invoke with `/<name>`. Writes \
+            description: "Create a new skill the user can invoke with `/<name>`. Writes \
                  `<merlion_home>/skills/<name>.md` with the given front-matter and body. \
                  Use this when you discover a repeatable workflow worth giving a name to."
-                    .into(),
+                .into(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -95,7 +96,10 @@ impl Tool for SkillCreate {
             return err(
                 call_id,
                 "skill_create",
-                format!("skill `{}` already exists; use skill_update to modify it", parsed.name),
+                format!(
+                    "skill `{}` already exists; use skill_update to modify it",
+                    parsed.name
+                ),
             );
         }
         if let Err(e) = ensure_under(&self.cfg.skills_dir, &path) {
@@ -106,9 +110,17 @@ impl Tool for SkillCreate {
             return err(call_id, "skill_create", format!("mkdir: {e}"));
         }
         if let Err(e) = fs::write(&path, content).await {
-            return err(call_id, "skill_create", format!("write {}: {e}", path.display()));
+            return err(
+                call_id,
+                "skill_create",
+                format!("write {}: {e}", path.display()),
+            );
         }
-        ok(call_id, "skill_create", format!("created skill `{}` at {}", parsed.name, path.display()))
+        ok(
+            call_id,
+            "skill_create",
+            format!("created skill `{}` at {}", parsed.name, path.display()),
+        )
     }
 }
 
@@ -117,11 +129,10 @@ impl Tool for SkillUpdate {
     fn schema(&self) -> ToolSchema {
         ToolSchema {
             name: "skill_update".into(),
-            description:
-                "Update an existing skill's body (and optionally its description). \
+            description: "Update an existing skill's body (and optionally its description). \
                  The skill must already exist. Use this to refine a skill based on \
                  lessons learned while using it."
-                    .into(),
+                .into(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -147,7 +158,10 @@ impl Tool for SkillUpdate {
             return err(
                 call_id,
                 "skill_update",
-                format!("skill `{}` does not exist; use skill_create instead", parsed.name),
+                format!(
+                    "skill `{}` does not exist; use skill_create instead",
+                    parsed.name
+                ),
             );
         }
         if let Err(e) = ensure_under(&self.cfg.skills_dir, &path) {
@@ -155,7 +169,13 @@ impl Tool for SkillUpdate {
         }
         let existing = match fs::read_to_string(&path).await {
             Ok(s) => s,
-            Err(e) => return err(call_id, "skill_update", format!("read {}: {e}", path.display())),
+            Err(e) => {
+                return err(
+                    call_id,
+                    "skill_update",
+                    format!("read {}: {e}", path.display()),
+                )
+            }
         };
         let preserved_description = parsed
             .description
@@ -163,9 +183,17 @@ impl Tool for SkillUpdate {
             .unwrap_or_else(|| String::from("(no description)"));
         let content = render_skill_file(&parsed.name, &preserved_description, &parsed.body);
         if let Err(e) = fs::write(&path, content).await {
-            return err(call_id, "skill_update", format!("write {}: {e}", path.display()));
+            return err(
+                call_id,
+                "skill_update",
+                format!("write {}: {e}", path.display()),
+            );
         }
-        ok(call_id, "skill_update", format!("updated skill `{}` at {}", parsed.name, path.display()))
+        ok(
+            call_id,
+            "skill_update",
+            format!("updated skill `{}` at {}", parsed.name, path.display()),
+        )
     }
 }
 
@@ -174,7 +202,11 @@ fn validate_slug(s: &str) -> Result<(), String> {
         || !s
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-        || !s.chars().next().map(|c| c.is_ascii_alphanumeric()).unwrap_or(false)
+        || !s
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_alphanumeric())
+            .unwrap_or(false)
     {
         return Err(format!(
             "invalid skill name `{s}`: must match `^[a-z0-9][a-z0-9-]*$`"
@@ -187,8 +219,10 @@ fn validate_slug(s: &str) -> Result<(), String> {
 /// exist. Protects against `name = "../etc/passwd"` shenanigans.
 fn ensure_under(root: &Path, candidate: &Path) -> Result<(), String> {
     let root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
-    let parent =
-        candidate.parent().map(|p| p.canonicalize().unwrap_or_else(|_| p.to_path_buf())).ok_or_else(|| "no parent dir".to_string())?;
+    let parent = candidate
+        .parent()
+        .map(|p| p.canonicalize().unwrap_or_else(|_| p.to_path_buf()))
+        .ok_or_else(|| "no parent dir".to_string())?;
     if !parent.starts_with(&root) {
         return Err(format!(
             "refusing to write outside skills dir: {} not under {}",
@@ -221,9 +255,19 @@ fn extract_description(file: &str) -> Option<String> {
 }
 
 fn ok(call_id: &str, name: &str, content: String) -> ToolResult {
-    ToolResult { tool_call_id: call_id.into(), name: name.into(), content, is_error: false }
+    ToolResult {
+        tool_call_id: call_id.into(),
+        name: name.into(),
+        content,
+        is_error: false,
+    }
 }
 
 fn err(call_id: &str, name: &str, msg: String) -> ToolResult {
-    ToolResult { tool_call_id: call_id.into(), name: name.into(), content: msg, is_error: true }
+    ToolResult {
+        tool_call_id: call_id.into(),
+        name: name.into(),
+        content: msg,
+        is_error: true,
+    }
 }

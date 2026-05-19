@@ -177,6 +177,11 @@ mod tests {
         );
         // Body should have exactly 2 result lines before the truncation line.
         let lines: Vec<&str> = res.content.lines().collect();
-        assert_eq!(lines.len(), 3, "expected 2 results + 1 truncation line, got: {:?}", lines);
+        assert_eq!(
+            lines.len(),
+            3,
+            "expected 2 results + 1 truncation line, got: {:?}",
+            lines
+        );
     }
 }

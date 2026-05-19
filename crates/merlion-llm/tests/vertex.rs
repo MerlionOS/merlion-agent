@@ -89,14 +89,17 @@ async fn spawn_fixture_server(
     tokio::spawn(async move {
         if let Ok((mut sock, _)) = listener.accept().await {
             let mut buf = [0u8; 8192];
-            let n = tokio::io::AsyncReadExt::read(&mut sock, &mut buf).await.unwrap_or(0);
+            let n = tokio::io::AsyncReadExt::read(&mut sock, &mut buf)
+                .await
+                .unwrap_or(0);
             let req = String::from_utf8_lossy(&buf[..n]);
             assert!(
                 req.contains(expected_path_suffix),
                 "fixture server saw unexpected request path:\n{req}"
             );
             assert!(
-                req.to_lowercase().contains(&format!("authorization: bearer {expect_bearer}").to_lowercase()),
+                req.to_lowercase()
+                    .contains(&format!("authorization: bearer {expect_bearer}").to_lowercase()),
                 "fixture server did not see expected Authorization header:\n{req}"
             );
             let resp = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n".to_string();

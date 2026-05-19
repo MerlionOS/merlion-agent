@@ -9,8 +9,8 @@ use serde_json::{json, Value};
 use tokio::sync::Mutex;
 
 use crate::proto::{
-    CallToolParams, CallToolResult, ClientInfo, InitializeParams, InitializeResult, ListToolsResult,
-    McpTool, PROTOCOL_VERSION,
+    CallToolParams, CallToolResult, ClientInfo, InitializeParams, InitializeResult,
+    ListToolsResult, McpTool, PROTOCOL_VERSION,
 };
 use crate::{Error, Result};
 
@@ -71,7 +71,9 @@ impl McpClient {
         let init: InitializeResult = serde_json::from_value(raw)
             .map_err(|e| Error::Protocol(format!("initialize result: {e}")))?;
         *self.server_info.lock().await = Some(init.clone());
-        self.transport.notify("notifications/initialized", None).await?;
+        self.transport
+            .notify("notifications/initialized", None)
+            .await?;
         Ok(init)
     }
 
@@ -87,7 +89,10 @@ impl McpClient {
     /// this is *not* an error result; transport- or protocol-level failures
     /// bubble through `Result::Err` instead.
     pub async fn call_tool(&self, name: &str, arguments: Value) -> Result<CallToolResult> {
-        let params = CallToolParams { name: name.to_string(), arguments: Some(arguments) };
+        let params = CallToolParams {
+            name: name.to_string(),
+            arguments: Some(arguments),
+        };
         let raw = self
             .transport
             .request("tools/call", Some(serde_json::to_value(&params)?))

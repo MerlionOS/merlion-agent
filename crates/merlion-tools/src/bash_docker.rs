@@ -67,7 +67,11 @@ impl Tool for BashDocker {
             Ok(c) => c,
             Err(e) => {
                 if e.kind() == std::io::ErrorKind::NotFound {
-                    return err(call_id, "bash_docker", "docker binary not found on PATH".into());
+                    return err(
+                        call_id,
+                        "bash_docker",
+                        "docker binary not found on PATH".into(),
+                    );
                 }
                 return err(call_id, "bash_docker", format!("spawn failed: {e}"));
             }
@@ -88,7 +92,11 @@ impl Tool for BashDocker {
                 }
             }
             Ok(Err(e)) => err(call_id, "bash_docker", format!("io: {e}")),
-            Err(_) => err(call_id, "bash_docker", format!("timed out after {timeout:?}")),
+            Err(_) => err(
+                call_id,
+                "bash_docker",
+                format!("timed out after {timeout:?}"),
+            ),
         }
     }
 }
@@ -143,9 +151,7 @@ mod tests {
     #[tokio::test]
     async fn missing_container_arg_returns_error_result() {
         let tool = BashDocker;
-        let result = tool
-            .call("call-1", json!({ "command": "echo hi" }))
-            .await;
+        let result = tool.call("call-1", json!({ "command": "echo hi" })).await;
         assert!(result.is_error, "expected is_error=true, got {:?}", result);
         assert_eq!(result.name, "bash_docker");
         assert!(
@@ -158,9 +164,7 @@ mod tests {
     #[tokio::test]
     async fn missing_command_arg_returns_error_result() {
         let tool = BashDocker;
-        let result = tool
-            .call("call-2", json!({ "container": "demo" }))
-            .await;
+        let result = tool.call("call-2", json!({ "container": "demo" })).await;
         assert!(result.is_error);
         assert!(result.content.contains("invalid arguments"));
     }
@@ -205,10 +209,8 @@ mod tests {
         let _g = ENV_GUARD.lock().unwrap();
         // Build a fake "docker" shim that just echoes its args, to verify
         // the call() path end-to-end without needing a real docker engine.
-        let dir = std::env::temp_dir().join(format!(
-            "merlion-bash-docker-test-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("merlion-bash-docker-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let script = dir.join("fake-docker.sh");
         std::fs::write(

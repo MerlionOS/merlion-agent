@@ -139,15 +139,15 @@ impl Tool for TaskTool {
                 AgentEvent::ToolCallStart { id, name, .. } => {
                     tracing::debug!(target: "merlion::task", subagent_call = %id, tool = %name, "subagent tool call");
                 }
-                AgentEvent::ToolCallFinish { id, name, is_error, .. } => {
+                AgentEvent::ToolCallFinish {
+                    id, name, is_error, ..
+                } => {
                     tracing::debug!(target: "merlion::task", subagent_call = %id, tool = %name, is_error, "subagent tool finish");
                 }
                 AgentEvent::IterationBudgetExhausted => {
                     budget_exhausted = true;
                 }
-                AgentEvent::AssistantDelta(_)
-                | AgentEvent::Usage(_)
-                | AgentEvent::Done => {}
+                AgentEvent::AssistantDelta(_) | AgentEvent::Usage(_) | AgentEvent::Done => {}
             }
         }
 
@@ -226,9 +226,7 @@ mod tests {
     #[tokio::test]
     async fn call_without_install_returns_error() {
         let tool = TaskTool::new();
-        let res = tool
-            .call("call_1", json!({ "prompt": "anything" }))
-            .await;
+        let res = tool.call("call_1", json!({ "prompt": "anything" })).await;
         assert!(res.is_error, "must be is_error when no agent installed");
         assert_eq!(res.tool_call_id, "call_1");
         assert_eq!(res.name, "task");

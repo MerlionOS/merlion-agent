@@ -38,11 +38,7 @@ impl StdioTransport {
     /// Spawn `program` with `args` and `env`, returning a connected
     /// transport. The reader/stderr tasks are detached and will exit when
     /// `close()` is called or the child process dies.
-    pub async fn spawn(
-        program: &str,
-        args: &[String],
-        env: &[(String, String)],
-    ) -> Result<Self> {
+    pub async fn spawn(program: &str, args: &[String], env: &[(String, String)]) -> Result<Self> {
         let mut cmd = Command::new(program);
         cmd.args(args)
             .stdin(Stdio::piped())
@@ -97,10 +93,7 @@ impl StdioTransport {
                                 if let Some(tx) = sender {
                                     let _ = tx.send(resp);
                                 } else {
-                                    tracing::warn!(
-                                        id = id,
-                                        "mcp response had no pending request"
-                                    );
+                                    tracing::warn!(id = id, "mcp response had no pending request");
                                 }
                             }
                             Err(e) => {

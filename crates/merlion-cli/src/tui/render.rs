@@ -12,10 +12,10 @@ pub fn draw(f: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),                     // header
-            Constraint::Min(1),                        // conversation
-            Constraint::Length(1),                     // status
-            Constraint::Length(input_height + 2),      // input (+2 for borders)
+            Constraint::Length(1),                // header
+            Constraint::Min(1),                   // conversation
+            Constraint::Length(1),                // status
+            Constraint::Length(input_height + 2), // input (+2 for borders)
         ])
         .split(f.area());
 
@@ -37,9 +37,7 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
 }
 
 fn draw_status(f: &mut Frame, area: Rect, app: &App) {
-    let style = if app.status.starts_with("running tool")
-        || app.status.starts_with("thinking")
-    {
+    let style = if app.status.starts_with("running tool") || app.status.starts_with("thinking") {
         app.theme.status_busy
     } else if app.status.contains("exhausted") || app.status.contains("error") {
         app.theme.tool_err
@@ -56,7 +54,10 @@ fn draw_status(f: &mut Frame, area: Rect, app: &App) {
         let p = usage.prompt_tokens.unwrap_or(0);
         let c = usage.completion_tokens.unwrap_or(0);
         let t = usage.total_tokens.unwrap_or(p + c);
-        spans.push(Span::styled(format!("   · tokens: {p} in / {c} out / {t} total"), dim));
+        spans.push(Span::styled(
+            format!("   · tokens: {p} in / {c} out / {t} total"),
+            dim,
+        ));
     }
     f.render_widget(Paragraph::new(Line::from(spans)), area);
 }
@@ -128,8 +129,13 @@ fn render_turns(turns: &[RenderedTurn], theme: &Theme) -> Vec<Line<'static>> {
                     theme.tool_call,
                 )));
                 if *finished {
-                    let head: String =
-                        content.lines().next().unwrap_or("").chars().take(120).collect();
+                    let head: String = content
+                        .lines()
+                        .next()
+                        .unwrap_or("")
+                        .chars()
+                        .take(120)
+                        .collect();
                     let tag = if *is_error { "ERR" } else { "ok" };
                     let style = if *is_error {
                         theme.tool_err

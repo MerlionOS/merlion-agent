@@ -118,10 +118,7 @@ fn voice_transcript_prefix_is_prepended() {
 /// first request and an empty result on subsequent polls so the long-poll
 /// loop keeps running quietly. Any `/sendMessage` POST is answered with a
 /// success body and forwarded to `sends_tx` for assertions.
-async fn spawn_fixture_telegram(
-    token: &'static str,
-    sends_tx: mpsc::Sender<String>,
-) -> String {
+async fn spawn_fixture_telegram(token: &'static str, sends_tx: mpsc::Sender<String>) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let token = token.to_string();
@@ -152,15 +149,20 @@ async fn spawn_fixture_telegram(
                         }
                         continue;
                     };
-                    let header_str =
-                        std::str::from_utf8(&buf[..header_end]).unwrap_or("").to_string();
+                    let header_str = std::str::from_utf8(&buf[..header_end])
+                        .unwrap_or("")
+                        .to_string();
                     let content_length = header_str
                         .lines()
                         .find_map(|l| {
                             let mut parts = l.splitn(2, ':');
                             let k = parts.next()?.trim().to_ascii_lowercase();
                             let v = parts.next()?.trim();
-                            if k == "content-length" { v.parse::<usize>().ok() } else { None }
+                            if k == "content-length" {
+                                v.parse::<usize>().ok()
+                            } else {
+                                None
+                            }
                         })
                         .unwrap_or(0);
                     let body_start = header_end + 4;
@@ -269,8 +271,14 @@ async fn telegram_gateway_polls_and_sends() {
         .await
         .expect("timed out waiting for sendMessage")
         .expect("sends channel closed");
-    assert!(sent_body.contains("\"chat_id\":555"), "body was: {sent_body}");
-    assert!(sent_body.contains("\"text\":\"pong\""), "body was: {sent_body}");
+    assert!(
+        sent_body.contains("\"chat_id\":555"),
+        "body was: {sent_body}"
+    );
+    assert!(
+        sent_body.contains("\"text\":\"pong\""),
+        "body was: {sent_body}"
+    );
     assert!(
         sent_body.contains("\"reply_to_message_id\":7"),
         "body was: {sent_body}"

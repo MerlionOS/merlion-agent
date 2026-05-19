@@ -76,8 +76,16 @@ fn write_updates_index_with_new_line() {
 
     let rows = store.list().unwrap();
     let names: Vec<_> = rows.iter().map(|r| r.name.clone()).collect();
-    assert!(names.contains(&"alpha".to_string()), "missing alpha: {:?}", names);
-    assert!(names.contains(&"beta".to_string()), "missing beta: {:?}", names);
+    assert!(
+        names.contains(&"alpha".to_string()),
+        "missing alpha: {:?}",
+        names
+    );
+    assert!(
+        names.contains(&"beta".to_string()),
+        "missing beta: {:?}",
+        names
+    );
 
     let alpha_row = rows.iter().find(|r| r.name == "alpha").unwrap();
     assert_eq!(alpha_row.file, "alpha.md");
@@ -101,7 +109,10 @@ fn write_overwrite_preserves_created_at_and_updates_index_in_place() {
     store.write(&m2).unwrap();
     let after_second = store.read("alpha").unwrap();
 
-    assert_eq!(after_second.created_at, original_created, "created_at must be preserved");
+    assert_eq!(
+        after_second.created_at, original_created,
+        "created_at must be preserved"
+    );
     assert!(after_second.updated_at >= after_first.updated_at);
     assert_eq!(after_second.body.trim_end(), "v2");
     assert_eq!(after_second.description, "new hook");
@@ -138,7 +149,15 @@ fn rejects_invalid_slug() {
     let tmp = tempdir().unwrap();
     let store = MemoryStore::open(tmp.path()).unwrap();
 
-    for bad in ["", "-leading", "UPPER", "has space", "has_underscore", "foo!", "ÿ"] {
+    for bad in [
+        "",
+        "-leading",
+        "UPPER",
+        "has space",
+        "has_underscore",
+        "foo!",
+        "ÿ",
+    ] {
         let m = sample_memory(bad, "desc", MemoryType::User, "body\n");
         assert!(
             store.write(&m).is_err(),
@@ -184,7 +203,11 @@ fn render_context_block_honors_max_chars() {
     // Tight budget: must not exceed max_chars and must still start with header.
     let header_len = "# Persistent memory (5 entries)\n".len();
     let tight = store.render_context_block(header_len + 20).unwrap();
-    assert!(tight.len() <= header_len + 20, "block too long: {} bytes", tight.len());
+    assert!(
+        tight.len() <= header_len + 20,
+        "block too long: {} bytes",
+        tight.len()
+    );
     assert!(tight.starts_with("# Persistent memory (5 entries)"));
 
     // Budget smaller than the header alone: returns empty.

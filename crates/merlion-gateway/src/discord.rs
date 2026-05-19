@@ -141,10 +141,8 @@ async fn send_loop(http: Arc<Http>, mut outgoing_rx: mpsc::Receiver<OutgoingMess
         if let Some(reply_to) = msg.reply_to.as_ref() {
             match reply_to.parse::<u64>() {
                 Ok(n) => {
-                    let mut reference = MessageReference::new(
-                        MessageReferenceKind::Default,
-                        channel,
-                    );
+                    let mut reference =
+                        MessageReference::new(MessageReferenceKind::Default, channel);
                     reference.message_id = Some(MessageId::new(n));
                     builder = builder.reference_message(reference);
                 }
@@ -189,7 +187,10 @@ mod tests {
 
     #[test]
     fn strips_plain_mention() {
-        assert_eq!(strip_bot_mention("<@12345> hello there", 12345), "hello there");
+        assert_eq!(
+            strip_bot_mention("<@12345> hello there", 12345),
+            "hello there"
+        );
     }
 
     #[test]

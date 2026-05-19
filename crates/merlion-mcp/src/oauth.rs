@@ -58,7 +58,9 @@ impl Tokens {
     /// Returns `true` if `expires_at` is set and is in the past (allowing
     /// a 30-second clock-skew margin).
     pub fn is_expired(&self) -> bool {
-        let Some(exp) = self.expires_at else { return false };
+        let Some(exp) = self.expires_at else {
+            return false;
+        };
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
@@ -467,10 +469,7 @@ mod tests {
     #[test]
     fn parse_code_handles_url_encoded() {
         let line = "GET /callback?code=a%2Bb%2Fc HTTP/1.1";
-        assert_eq!(
-            parse_code_from_request_line(line).as_deref(),
-            Some("a+b/c")
-        );
+        assert_eq!(parse_code_from_request_line(line).as_deref(), Some("a+b/c"));
     }
 
     #[test]

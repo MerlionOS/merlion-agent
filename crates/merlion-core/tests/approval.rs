@@ -24,11 +24,10 @@ struct ScriptedLlm {
 
 #[async_trait]
 impl LlmClient for ScriptedLlm {
-    async fn stream(
-        &self,
-        _req: LlmRequest,
-    ) -> Result<BoxStream<'static, Result<LlmStreamEvent>>> {
-        let idx = self.call_index.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    async fn stream(&self, _req: LlmRequest) -> Result<BoxStream<'static, Result<LlmStreamEvent>>> {
+        let idx = self
+            .call_index
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let events: Vec<Result<LlmStreamEvent>> = if idx == 0 {
             vec![
                 Ok(LlmStreamEvent::ToolCalls(vec![ToolCall {
@@ -75,12 +74,16 @@ async fn collect_events(mut rx: mpsc::Receiver<AgentEvent>) -> Vec<AgentEvent> {
 
 #[tokio::test]
 async fn denying_approver_blocks_dispatch_and_synthesizes_error_result() {
-    let llm = Arc::new(ScriptedLlm { call_index: 0.into() });
+    let llm = Arc::new(ScriptedLlm {
+        call_index: 0.into(),
+    });
     let mut tools = ToolRegistry::new();
     tools.register(ForbiddenBash);
 
-    let agent = Agent::new(llm, tools, AgentOptions::default())
-        .with_approver(Arc::new(DenyAllApprover { reason: "blocked in test".into() }));
+    let agent =
+        Agent::new(llm, tools, AgentOptions::default()).with_approver(Arc::new(DenyAllApprover {
+            reason: "blocked in test".into(),
+        }));
 
     let (tx, rx) = mpsc::channel::<AgentEvent>(64);
     let mut messages = vec![Message::user("clean up")];
@@ -89,24 +92,35 @@ async fn denying_approver_blocks_dispatch_and_synthesizes_error_result() {
     agent.run(&mut messages, tx).await.unwrap();
     let events = collector.await.unwrap();
 
-    let denied = events.iter().any(|e| matches!(
-        e,
-        AgentEvent::ToolCallFinish { is_error: true, content, .. }
-            if content.contains("tool rejected by user") && content.contains("blocked in test")
-    ));
-    assert!(denied, "expected a ToolCallFinish carrying the deny reason; got {events:#?}");
+    let denied = events.iter().any(|e| {
+        matches!(
+            e,
+            AgentEvent::ToolCallFinish { is_error: true, content, .. }
+                if content.contains("tool rejected by user") && content.contains("blocked in test")
+        )
+    });
+    assert!(
+        denied,
+        "expected a ToolCallFinish carrying the deny reason; got {events:#?}"
+    );
 
     let tool_msg = messages
         .iter()
         .rev()
         .find(|m| matches!(m.role, merlion_core::Role::Tool))
         .expect("expected a tool message in history");
-    assert!(tool_msg.content.as_deref().unwrap().contains("blocked in test"));
+    assert!(tool_msg
+        .content
+        .as_deref()
+        .unwrap()
+        .contains("blocked in test"));
 }
 
 #[tokio::test]
 async fn default_approver_allows_dispatch() {
-    let llm = Arc::new(ScriptedLlm { call_index: 0.into() });
+    let llm = Arc::new(ScriptedLlm {
+        call_index: 0.into(),
+    });
     let mut tools = ToolRegistry::new();
 
     struct OkBash;
@@ -130,8 +144,8 @@ async fn default_approver_allows_dispatch() {
     }
     tools.register(OkBash);
 
-    let agent = Agent::new(llm, tools, AgentOptions::default())
-        .with_approver(Arc::new(AllowAllApprover));
+    let agent =
+        Agent::new(llm, tools, AgentOptions::default()).with_approver(Arc::new(AllowAllApprover));
 
     let (tx, rx) = mpsc::channel::<AgentEvent>(64);
     let mut messages = vec![Message::user("do it")];
@@ -144,5 +158,8 @@ async fn default_approver_allows_dispatch() {
         e,
         AgentEvent::ToolCallFinish { is_error: false, content, .. } if content == "did the thing"
     ));
-    assert!(succeeded, "expected a successful ToolCallFinish; got {events:#?}");
+    assert!(
+        succeeded,
+        "expected a successful ToolCallFinish; got {events:#?}"
+    );
 }

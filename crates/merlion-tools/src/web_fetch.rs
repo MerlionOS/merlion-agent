@@ -28,12 +28,11 @@ impl Tool for WebFetch {
     fn schema(&self) -> ToolSchema {
         ToolSchema {
             name: "web_fetch".into(),
-            description:
-                "HTTP GET a URL and return the response body as readable plain text. \
+            description: "HTTP GET a URL and return the response body as readable plain text. \
                  By default, HTML responses are converted to plain text (tags stripped). \
                  Set `as_html: true` to return raw HTML. Body is capped at `max_bytes` \
                  (default 262144 = 256 KiB)."
-                    .into(),
+                .into(),
             parameters: json!({
                 "type": "object",
                 "properties": {

@@ -41,10 +41,7 @@ async fn echo_server_round_trips_a_request() {
         .await
         .expect("spawn echo server");
 
-    let result = transport
-        .request("ping", None)
-        .await
-        .expect("ping request");
+    let result = transport.request("ping", None).await.expect("ping request");
 
     assert_eq!(result, serde_json::json!({"ok": true}));
 

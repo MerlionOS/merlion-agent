@@ -392,7 +392,10 @@ mod tests {
 
     #[test]
     fn strips_leading_mention() {
-        assert_eq!(strip_bot_mention("<@U12345> hello there", "U12345"), "hello there");
+        assert_eq!(
+            strip_bot_mention("<@U12345> hello there", "U12345"),
+            "hello there"
+        );
     }
 
     #[test]
@@ -429,7 +432,10 @@ mod tests {
 
     #[test]
     fn no_mention_just_trims() {
-        assert_eq!(strip_bot_mention("  hello world  ", "U12345"), "hello world");
+        assert_eq!(
+            strip_bot_mention("  hello world  ", "U12345"),
+            "hello world"
+        );
     }
 
     #[test]

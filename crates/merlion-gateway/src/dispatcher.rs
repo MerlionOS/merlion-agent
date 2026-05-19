@@ -164,16 +164,17 @@ impl Dispatcher {
                     info!(tool = %name, is_error, "tool call finished");
                 }
                 AgentEvent::IterationBudgetExhausted => {
-                    accumulated_reply
-                        .push_str("\n\n[merlion: iteration budget exhausted — try splitting the task]");
+                    accumulated_reply.push_str(
+                        "\n\n[merlion: iteration budget exhausted — try splitting the task]",
+                    );
                 }
                 _ => {}
             }
         }
 
-        let (res, new_messages) = run_task.await.map_err(|e| {
-            crate::Error::Other(format!("agent task join error: {e}"))
-        })?;
+        let (res, new_messages) = run_task
+            .await
+            .map_err(|e| crate::Error::Other(format!("agent task join error: {e}")))?;
         if let Err(e) = res {
             let reply = format!("merlion error: {e}");
             let _ = outgoing_tx
@@ -211,16 +212,14 @@ impl Dispatcher {
         Ok(())
     }
 
-    async fn handle_slash(
-        &self,
-        msg: &IncomingMessage,
-        session_id: &str,
-    ) -> Result<SlashOutcome> {
+    async fn handle_slash(&self, msg: &IncomingMessage, session_id: &str) -> Result<SlashOutcome> {
         let trimmed = msg.text.trim();
         if !trimmed.starts_with('/') {
             return Ok(SlashOutcome::Forward(trimmed.to_string()));
         }
-        let (cmd, rest) = trimmed.split_once(char::is_whitespace).unwrap_or((trimmed, ""));
+        let (cmd, rest) = trimmed
+            .split_once(char::is_whitespace)
+            .unwrap_or((trimmed, ""));
         match cmd {
             "/new" | "/reset" => {
                 self.sessions.lock().await.remove(session_id);
@@ -231,7 +230,9 @@ impl Dispatcher {
                 // for the messaging case. Future enhancement: a real
                 // /new that rotates and archives.
                 drop(new_session_id);
-                Ok(SlashOutcome::Reply("started a fresh in-memory session".into()))
+                Ok(SlashOutcome::Reply(
+                    "started a fresh in-memory session".into(),
+                ))
             }
             "/join" => {
                 let key = rest.trim();
@@ -285,7 +286,9 @@ impl Dispatcher {
             "/help" => Ok(SlashOutcome::Reply(
                 "Commands: /new (start fresh) · /join <key> · /leave · /help".into(),
             )),
-            _ => Ok(SlashOutcome::Forward(format!("{cmd} {rest}").trim().to_string())),
+            _ => Ok(SlashOutcome::Forward(
+                format!("{cmd} {rest}").trim().to_string(),
+            )),
         }
     }
 
@@ -316,11 +319,17 @@ impl Dispatcher {
                 vec![sys]
             }
         };
-        Ok(SessionState { messages, curator: Curator::default() })
+        Ok(SessionState {
+            messages,
+            curator: Curator::default(),
+        })
     }
 
     async fn store_state(&self, session_id: &str, state: SessionState) {
-        self.sessions.lock().await.insert(session_id.to_string(), state);
+        self.sessions
+            .lock()
+            .await
+            .insert(session_id.to_string(), state);
     }
 
     async fn persist(&self, session_id: &str, m: &Message) -> Result<()> {

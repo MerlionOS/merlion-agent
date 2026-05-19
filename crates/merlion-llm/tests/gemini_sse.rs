@@ -26,7 +26,9 @@ async fn spawn_fixture_server(body: &'static str, expected_path_suffix: &'static
     tokio::spawn(async move {
         if let Ok((mut sock, _)) = listener.accept().await {
             let mut buf = [0u8; 8192];
-            let n = tokio::io::AsyncReadExt::read(&mut sock, &mut buf).await.unwrap_or(0);
+            let n = tokio::io::AsyncReadExt::read(&mut sock, &mut buf)
+                .await
+                .unwrap_or(0);
             let req = String::from_utf8_lossy(&buf[..n]);
             assert!(
                 req.contains(expected_path_suffix),

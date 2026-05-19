@@ -64,7 +64,10 @@ impl AnthropicClient {
     fn build_headers(&self) -> Result<HeaderMap> {
         let mut h = self.extra_headers.clone();
         h.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-        h.insert("anthropic-version", HeaderValue::from_static(ANTHROPIC_VERSION));
+        h.insert(
+            "anthropic-version",
+            HeaderValue::from_static(ANTHROPIC_VERSION),
+        );
         if let Some(key) = &self.api_key {
             let v = HeaderValue::from_str(key)
                 .map_err(|e| Error::Llm(format!("invalid api key: {e}")))?;
@@ -176,19 +179,15 @@ pub(crate) fn convert_messages(messages: &[Message]) -> (String, Vec<Value>) {
 
 #[async_trait]
 impl LlmClient for AnthropicClient {
-    async fn stream(
-        &self,
-        req: LlmRequest,
-    ) -> Result<BoxStream<'static, Result<LlmStreamEvent>>> {
+    async fn stream(&self, req: LlmRequest) -> Result<BoxStream<'static, Result<LlmStreamEvent>>> {
         let url = format!("{}/messages", self.base_url);
         let body = self.build_body(&req, true);
         let headers = self.build_headers()?;
 
         let http = self.http.clone();
-        let resp = crate::retry::send_with_retry(|| {
-            http.post(&url).headers(headers.clone()).json(&body)
-        })
-        .await?;
+        let resp =
+            crate::retry::send_with_retry(|| http.post(&url).headers(headers.clone()).json(&body))
+                .await?;
 
         let stream = anthropic_sse_to_events(resp.bytes_stream()).boxed();
         Ok(stream)
@@ -362,7 +361,11 @@ where
 #[derive(Debug)]
 enum BlockState {
     Text,
-    ToolUse { id: String, name: String, args: String },
+    ToolUse {
+        id: String,
+        name: String,
+        args: String,
+    },
     Skip,
 }
 
@@ -425,11 +428,29 @@ mod tests {
         let msgs = vec![
             Message::user("run two"),
             Message::assistant_tool_calls(vec![
-                ToolCall { id: "a".into(), name: "bash".into(), arguments: json!({"command":"ls"}) },
-                ToolCall { id: "b".into(), name: "bash".into(), arguments: json!({"command":"pwd"}) },
+                ToolCall {
+                    id: "a".into(),
+                    name: "bash".into(),
+                    arguments: json!({"command":"ls"}),
+                },
+                ToolCall {
+                    id: "b".into(),
+                    name: "bash".into(),
+                    arguments: json!({"command":"pwd"}),
+                },
             ]),
-            Message::tool_response(ToolResult { tool_call_id: "a".into(), name: "bash".into(), content: "x".into(), is_error: false }),
-            Message::tool_response(ToolResult { tool_call_id: "b".into(), name: "bash".into(), content: "y".into(), is_error: false }),
+            Message::tool_response(ToolResult {
+                tool_call_id: "a".into(),
+                name: "bash".into(),
+                content: "x".into(),
+                is_error: false,
+            }),
+            Message::tool_response(ToolResult {
+                tool_call_id: "b".into(),
+                name: "bash".into(),
+                content: "y".into(),
+                is_error: false,
+            }),
         ];
         let (_, out) = convert_messages(&msgs);
         let tool_turn = out.last().unwrap();
@@ -443,7 +464,8 @@ mod tests {
 
     #[test]
     fn body_carries_required_max_tokens_and_drops_authorization_header() {
-        let client = AnthropicClient::new("https://api.anthropic.com/v1", Some("sk-test".into())).unwrap();
+        let client =
+            AnthropicClient::new("https://api.anthropic.com/v1", Some("sk-test".into())).unwrap();
         let req = LlmRequest {
             model: "claude-opus-4-7".into(),
             messages: vec![Message::user("hi")],

@@ -66,5 +66,10 @@ impl Tool for Read {
 }
 
 fn err(call_id: &str, name: &str, msg: String) -> ToolResult {
-    ToolResult { tool_call_id: call_id.into(), name: name.into(), content: msg, is_error: true }
+    ToolResult {
+        tool_call_id: call_id.into(),
+        name: name.into(),
+        content: msg,
+        is_error: true,
+    }
 }

@@ -23,7 +23,11 @@ mod approver;
 mod tui;
 
 #[derive(Debug, Parser)]
-#[command(name = "merlion", version, about = "Merlion Agent — Rust port of hermes-agent")]
+#[command(
+    name = "merlion",
+    version,
+    about = "Merlion Agent — Rust port of hermes-agent"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
@@ -174,7 +178,9 @@ enum SessionsAction {
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_env("MERLION_LOG").unwrap_or_else(|_| EnvFilter::new("warn")))
+        .with_env_filter(
+            EnvFilter::try_from_env("MERLION_LOG").unwrap_or_else(|_| EnvFilter::new("warn")),
+        )
         .with_writer(std::io::stderr)
         .compact()
         .init();
@@ -182,11 +188,16 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     let cfg = merlion_config::load().context("loading config")?;
 
-    match cli
-        .command
-        .unwrap_or(Command::Chat { session: None, tui: false, no_tui: false })
-    {
-        Command::Chat { session, tui, no_tui } => chat(cfg, session, tui, no_tui).await,
+    match cli.command.unwrap_or(Command::Chat {
+        session: None,
+        tui: false,
+        no_tui: false,
+    }) {
+        Command::Chat {
+            session,
+            tui,
+            no_tui,
+        } => chat(cfg, session, tui, no_tui).await,
         Command::Model { id } => model_cmd(cfg, id),
         Command::Config { action } => config_cmd(cfg, action),
         Command::Doctor => doctor(cfg),
@@ -212,7 +223,10 @@ async fn update_cmd(apply: bool) -> Result<()> {
         );
     }
     let body: serde_json::Value = resp.json().await?;
-    let latest = body.get("tag_name").and_then(|v| v.as_str()).unwrap_or("(unknown)");
+    let latest = body
+        .get("tag_name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("(unknown)");
     let current_full = format!("v{}", env!("CARGO_PKG_VERSION"));
     println!("installed:  {current_full}");
     println!("latest tag: {latest}");
@@ -225,7 +239,10 @@ async fn update_cmd(apply: bool) -> Result<()> {
         println!();
         println!("To upgrade:");
         println!("  merlion update --apply        # download + swap the binary (Unix)");
-        println!("  cargo binstall merlion-agent --version {}", latest.trim_start_matches('v'));
+        println!(
+            "  cargo binstall merlion-agent --version {}",
+            latest.trim_start_matches('v')
+        );
         println!("  brew upgrade merlion-agent    # if installed via Homebrew");
         println!(
             "  curl -fsSL https://raw.githubusercontent.com/MerlionOS/merlion-agent/main/scripts/install.sh | bash"
@@ -240,7 +257,11 @@ async fn update_cmd(apply: bool) -> Result<()> {
         );
     }
     let target = detect_target_triple().context("could not infer this binary's target triple")?;
-    let assets = body.get("assets").and_then(|a| a.as_array()).cloned().unwrap_or_default();
+    let assets = body
+        .get("assets")
+        .and_then(|a| a.as_array())
+        .cloned()
+        .unwrap_or_default();
     let asset_name = format!("merlion-{target}.tar.gz");
     let asset = assets
         .iter()
@@ -248,7 +269,10 @@ async fn update_cmd(apply: bool) -> Result<()> {
         .ok_or_else(|| {
             anyhow::anyhow!(
                 "no release asset named `{asset_name}` on tag {latest}; available: {:?}",
-                assets.iter().filter_map(|a| a.get("name").and_then(|n| n.as_str())).collect::<Vec<_>>()
+                assets
+                    .iter()
+                    .filter_map(|a| a.get("name").and_then(|n| n.as_str()))
+                    .collect::<Vec<_>>()
             )
         })?;
     let url = asset
@@ -257,7 +281,13 @@ async fn update_cmd(apply: bool) -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("asset missing browser_download_url"))?;
 
     println!("downloading {url}");
-    let tarball = client.get(url).send().await?.error_for_status()?.bytes().await?;
+    let tarball = client
+        .get(url)
+        .send()
+        .await?
+        .error_for_status()?
+        .bytes()
+        .await?;
 
     let tmp = tempfile::tempdir().context("create temp dir")?;
     let tar_path = tmp.path().join(&asset_name);
@@ -282,7 +312,11 @@ async fn update_cmd(apply: bool) -> Result<()> {
     }
 
     let current_exe = std::env::current_exe().context("current_exe")?;
-    println!("replacing {} → {}", current_exe.display(), extracted.display());
+    println!(
+        "replacing {} → {}",
+        current_exe.display(),
+        extracted.display()
+    );
     // rename across filesystems can fail; fall back to copy+remove.
     if std::fs::rename(&extracted, &current_exe).is_err() {
         std::fs::copy(&extracted, &current_exe).context("copy new binary into place")?;
@@ -355,13 +389,21 @@ fn doctor(cfg: Config) -> Result<()> {
     let has_key = std::env::var(&provider.api_key_env).is_ok();
     println!(
         "api key:      {}",
-        if has_key { "found".into() } else { format!("MISSING ({})", provider.api_key_env) }
+        if has_key {
+            "found".into()
+        } else {
+            format!("MISSING ({})", provider.api_key_env)
+        }
     );
 
     // External tools merlion shells out to
     println!("\n— external tools —");
     for tool in ["rg", "grep", "git", "bash", "curl"] {
-        let found = Command::new("which").arg(tool).output().ok().filter(|o| o.status.success());
+        let found = Command::new("which")
+            .arg(tool)
+            .output()
+            .ok()
+            .filter(|o| o.status.success());
         match found {
             Some(o) => {
                 let path = String::from_utf8_lossy(&o.stdout).trim().to_string();
@@ -374,15 +416,29 @@ fn doctor(cfg: Config) -> Result<()> {
     // Stores
     println!("\n— stores —");
     let session_db = home.join("sessions.db");
-    println!("sessions.db   {}", if session_db.exists() { "ok" } else { "(none yet)" });
+    println!(
+        "sessions.db   {}",
+        if session_db.exists() {
+            "ok"
+        } else {
+            "(none yet)"
+        }
+    );
     let mem_dir = home.join("memory");
-    println!("memory/       {}", if mem_dir.exists() { "ok" } else { "(none yet)" });
+    println!(
+        "memory/       {}",
+        if mem_dir.exists() { "ok" } else { "(none yet)" }
+    );
     let skills_dir = home.join("skills");
     let bundled_skills = std::env::current_dir().ok().map(|p| p.join("skills"));
     println!(
         "skills/       user={} bundled={}",
         if skills_dir.exists() { "ok" } else { "none" },
-        bundled_skills.as_ref().filter(|p| p.exists()).map(|_| "ok").unwrap_or("none"),
+        bundled_skills
+            .as_ref()
+            .filter(|p| p.exists())
+            .map(|_| "ok")
+            .unwrap_or("none"),
     );
 
     // MCP
@@ -393,7 +449,11 @@ fn doctor(cfg: Config) -> Result<()> {
         }
         Ok(reg) => {
             for (name, entry) in &reg.servers {
-                let status = if entry.enabled { "enabled " } else { "disabled" };
+                let status = if entry.enabled {
+                    "enabled "
+                } else {
+                    "disabled"
+                };
                 println!("{status}  {name}");
             }
         }
@@ -409,7 +469,11 @@ fn doctor(cfg: Config) -> Result<()> {
         ("Slack bot token", "SLACK_BOT_TOKEN"),
     ] {
         let set = std::env::var(var).is_ok();
-        println!("{:<18} {}", format!("{label}:"), if set { "set" } else { "MISSING" });
+        println!(
+            "{:<18} {}",
+            format!("{label}:"),
+            if set { "set" } else { "MISSING" }
+        );
     }
 
     // Cron
@@ -453,8 +517,8 @@ fn sessions_cmd(action: Option<SessionsAction>) -> Result<()> {
 
 async fn mcp_cmd(action: McpAction) -> Result<()> {
     let path = McpRegistry::default_path();
-    let mut reg = McpRegistry::load(&path)
-        .map_err(|e| anyhow::anyhow!("loading {}: {e}", path.display()))?;
+    let mut reg =
+        McpRegistry::load(&path).map_err(|e| anyhow::anyhow!("loading {}: {e}", path.display()))?;
     match action {
         McpAction::List => {
             if reg.servers.is_empty() {
@@ -462,13 +526,21 @@ async fn mcp_cmd(action: McpAction) -> Result<()> {
                 return Ok(());
             }
             for (name, entry) in &reg.servers {
-                let status = if entry.enabled { "enabled " } else { "disabled" };
+                let status = if entry.enabled {
+                    "enabled "
+                } else {
+                    "disabled"
+                };
                 match &entry.transport {
                     TransportSpec::Stdio { command, args, .. } => {
                         let argline = args.iter().cloned().collect::<Vec<_>>().join(" ");
                         println!("{status}  {name}\t stdio: {command} {argline}");
                     }
-                    TransportSpec::Http { url, bearer_env, oauth_client_id: _ } => {
+                    TransportSpec::Http {
+                        url,
+                        bearer_env,
+                        oauth_client_id: _,
+                    } => {
                         let auth = bearer_env.as_deref().unwrap_or("(none)");
                         println!("{status}  {name}\t http:  {url} (auth env: {auth})");
                     }
@@ -477,7 +549,9 @@ async fn mcp_cmd(action: McpAction) -> Result<()> {
         }
         McpAction::Add { name, command } => {
             if command.is_empty() {
-                anyhow::bail!("missing command — usage: `merlion mcp add <name> -- <cmd> <args...>`");
+                anyhow::bail!(
+                    "missing command — usage: `merlion mcp add <name> -- <cmd> <args...>`"
+                );
             }
             let program = command[0].clone();
             let args: Vec<String> = command.into_iter().skip(1).collect();
@@ -486,14 +560,22 @@ async fn mcp_cmd(action: McpAction) -> Result<()> {
                 .map_err(|e| anyhow::anyhow!("writing {}: {e}", path.display()))?;
             println!("added MCP server `{name}` to {}", path.display());
         }
-        McpAction::AddHttp { name, url, bearer_env } => {
+        McpAction::AddHttp {
+            name,
+            url,
+            bearer_env,
+        } => {
             let mut entry = ServerEntry::http(url.clone());
             if let TransportSpec::Http { bearer_env: be, .. } = &mut entry.transport {
                 *be = bearer_env;
             }
             reg.add(&name, entry);
-            reg.save(&path).map_err(|e| anyhow::anyhow!("writing {}: {e}", path.display()))?;
-            println!("added HTTP MCP server `{name}` ({url}) to {}", path.display());
+            reg.save(&path)
+                .map_err(|e| anyhow::anyhow!("writing {}: {e}", path.display()))?;
+            println!(
+                "added HTTP MCP server `{name}` ({url}) to {}",
+                path.display()
+            );
         }
         McpAction::Remove { name } => match reg.remove(&name) {
             Some(_) => {
@@ -516,10 +598,9 @@ async fn mcp_cmd(action: McpAction) -> Result<()> {
             println!("disabled `{name}`");
         }
         McpAction::Test { name } => {
-            let entry = reg
-                .servers
-                .get(&name)
-                .ok_or_else(|| anyhow::anyhow!("no server named `{name}` (try `merlion mcp list`)"))?;
+            let entry = reg.servers.get(&name).ok_or_else(|| {
+                anyhow::anyhow!("no server named `{name}` (try `merlion mcp list`)")
+            })?;
             let client = connect_server(&name, entry).await?;
             let info = client.initialize().await.context("initialize handshake")?;
             let server_name = info
@@ -527,7 +608,10 @@ async fn mcp_cmd(action: McpAction) -> Result<()> {
                 .as_ref()
                 .map(|s| s.name.as_str())
                 .unwrap_or("(unknown)");
-            println!("ok — server `{server_name}` (protocol {})", info.protocol_version);
+            println!(
+                "ok — server `{server_name}` (protocol {})",
+                info.protocol_version
+            );
             let tools = client.list_tools().await.context("list_tools")?;
             if tools.is_empty() {
                 println!("(server exposes no tools)");
@@ -546,14 +630,22 @@ async fn mcp_cmd(action: McpAction) -> Result<()> {
                 anyhow::anyhow!("no server named `{name}` (try `merlion mcp list`)")
             })?;
             let (url, client_id) = match &entry.transport {
-                TransportSpec::Http { url, oauth_client_id, .. } => {
-                    (url.clone(), oauth_client_id.clone())
-                }
+                TransportSpec::Http {
+                    url,
+                    oauth_client_id,
+                    ..
+                } => (url.clone(), oauth_client_id.clone()),
                 TransportSpec::Stdio { .. } => {
-                    anyhow::bail!("server `{name}` is stdio — OAuth applies to HTTP transports only");
+                    anyhow::bail!(
+                        "server `{name}` is stdio — OAuth applies to HTTP transports only"
+                    );
                 }
             };
-            let flow = OauthFlow { server_url: url, static_client_id: client_id, scopes: scope };
+            let flow = OauthFlow {
+                server_url: url,
+                static_client_id: client_id,
+                scopes: scope,
+            };
             let tokens = flow
                 .authorize()
                 .await
@@ -622,7 +714,11 @@ async fn connect_server(server_name: &str, entry: &ServerEntry) -> Result<McpCli
                 .map_err(|e| anyhow::anyhow!("spawn `{command}`: {e}"))?;
             Box::new(t)
         }
-        TransportSpec::Http { url, bearer_env, oauth_client_id: _ } => {
+        TransportSpec::Http {
+            url,
+            bearer_env,
+            oauth_client_id: _,
+        } => {
             let mut t = HttpTransport::new(url.clone())
                 .map_err(|e| anyhow::anyhow!("http transport `{url}`: {e}"))?;
             // Prefer a cached OAuth token if one exists for this server.
@@ -633,7 +729,9 @@ async fn connect_server(server_name: &str, entry: &ServerEntry) -> Result<McpCli
                 match std::env::var(env_var) {
                     Ok(tok) => t = t.with_bearer(tok),
                     Err(_) => {
-                        eprintln!("warning: bearer env `{env_var}` not set; mcp `{url}` will go unauth");
+                        eprintln!(
+                            "warning: bearer env `{env_var}` not set; mcp `{url}` will go unauth"
+                        );
                     }
                 }
             }
@@ -653,10 +751,16 @@ async fn gateway_cmd(cfg: Config, action: GatewayAction) -> Result<()> {
             let allow_all = std::env::var("MERLION_GATEWAY_ALLOW_ALL").is_ok();
             println!("Telegram:");
             println!("  TELEGRAM_BOT_TOKEN               {}", yes_no(tg_tok));
-            println!("  MERLION_GATEWAY_ALLOW_TELEGRAM   {}", yes_no(tg_allow || allow_all));
+            println!(
+                "  MERLION_GATEWAY_ALLOW_TELEGRAM   {}",
+                yes_no(tg_allow || allow_all)
+            );
             println!("Discord:");
             println!("  DISCORD_BOT_TOKEN                {}", yes_no(dc_tok));
-            println!("  MERLION_GATEWAY_ALLOW_DISCORD    {}", yes_no(dc_allow || allow_all));
+            println!(
+                "  MERLION_GATEWAY_ALLOW_DISCORD    {}",
+                yes_no(dc_allow || allow_all)
+            );
             println!();
             println!("Set `MERLION_GATEWAY_ALLOW_ALL=1` to admit any user (development only).");
             Ok(())
@@ -666,7 +770,11 @@ async fn gateway_cmd(cfg: Config, action: GatewayAction) -> Result<()> {
 }
 
 fn yes_no(b: bool) -> &'static str {
-    if b { "set" } else { "MISSING" }
+    if b {
+        "set"
+    } else {
+        "MISSING"
+    }
 }
 
 /// Start every gateway whose env-var config is present. Each gateway gets a
@@ -712,8 +820,7 @@ async fn start_gateways(cfg: Config) -> Result<()> {
     let mut started: Vec<&'static str> = Vec::new();
 
     if std::env::var("TELEGRAM_BOT_TOKEN").is_ok() {
-        let (tx, rx, dispatcher_task) =
-            spawn_dispatcher(&agent, &db, &system_prompt, &allowlist);
+        let (tx, rx, dispatcher_task) = spawn_dispatcher(&agent, &db, &system_prompt, &allowlist);
         tasks.push(dispatcher_task);
         let gw = Arc::new(TelegramGateway::from_env()?);
         let name = gw.name();
@@ -725,8 +832,7 @@ async fn start_gateways(cfg: Config) -> Result<()> {
         }));
     }
     if std::env::var("DISCORD_BOT_TOKEN").is_ok() {
-        let (tx, rx, dispatcher_task) =
-            spawn_dispatcher(&agent, &db, &system_prompt, &allowlist);
+        let (tx, rx, dispatcher_task) = spawn_dispatcher(&agent, &db, &system_prompt, &allowlist);
         tasks.push(dispatcher_task);
         let gw = Arc::new(DiscordGateway::from_env()?);
         let name = gw.name();
@@ -738,8 +844,7 @@ async fn start_gateways(cfg: Config) -> Result<()> {
         }));
     }
     if std::env::var("SLACK_APP_TOKEN").is_ok() && std::env::var("SLACK_BOT_TOKEN").is_ok() {
-        let (tx, rx, dispatcher_task) =
-            spawn_dispatcher(&agent, &db, &system_prompt, &allowlist);
+        let (tx, rx, dispatcher_task) = spawn_dispatcher(&agent, &db, &system_prompt, &allowlist);
         tasks.push(dispatcher_task);
         let gw = Arc::new(SlackGateway::from_env()?);
         let name = gw.name();
@@ -806,12 +911,26 @@ async fn cron_cmd(cfg: Config, action: CronAction) -> Result<()> {
             }
             for j in &reg.jobs {
                 let status = if j.enabled { "enabled " } else { "disabled" };
-                println!("{status}  {}\t{}\t→ {}\n  prompt: {}", j.name, j.schedule, j.destination, j.prompt);
+                println!(
+                    "{status}  {}\t{}\t→ {}\n  prompt: {}",
+                    j.name, j.schedule, j.destination, j.prompt
+                );
             }
             Ok(())
         }
-        CronAction::Add { name, schedule, prompt, destination } => {
-            let job = Job { name: name.clone(), schedule, prompt, enabled: true, destination };
+        CronAction::Add {
+            name,
+            schedule,
+            prompt,
+            destination,
+        } => {
+            let job = Job {
+                name: name.clone(),
+                schedule,
+                prompt,
+                enabled: true,
+                destination,
+            };
             reg.add(job).map_err(|e| anyhow::anyhow!("add: {e}"))?;
             reg.save(&path).map_err(|e| anyhow::anyhow!("save: {e}"))?;
             println!("added cron job `{name}`");
@@ -839,7 +958,10 @@ async fn cron_cmd(cfg: Config, action: CronAction) -> Result<()> {
         CronAction::Daemon => {
             let runner = build_cli_runner(cfg).await?;
             let scheduler = merlion_cron::Scheduler::new(reg, std::sync::Arc::new(runner));
-            scheduler.run().await.map_err(|e| anyhow::anyhow!("scheduler: {e}"))?;
+            scheduler
+                .run()
+                .await
+                .map_err(|e| anyhow::anyhow!("scheduler: {e}"))?;
             Ok(())
         }
     }
@@ -869,7 +991,10 @@ async fn build_cli_runner(cfg: Config) -> Result<CliJobRunner> {
         .system_prompt
         .clone()
         .unwrap_or_else(|| "You are Merlion, running a scheduled task non-interactively.".into());
-    Ok(CliJobRunner { agent: Arc::new(agent), system_prompt })
+    Ok(CliJobRunner {
+        agent: Arc::new(agent),
+        system_prompt,
+    })
 }
 
 struct CliJobRunner {
@@ -880,8 +1005,10 @@ struct CliJobRunner {
 #[async_trait::async_trait]
 impl merlion_cron::scheduler::JobRunner for CliJobRunner {
     async fn run_job(&self, job: &merlion_cron::Job) {
-        let mut messages =
-            vec![Message::system(&self.system_prompt), Message::user(&job.prompt)];
+        let mut messages = vec![
+            Message::system(&self.system_prompt),
+            Message::user(&job.prompt),
+        ];
         let (tx, mut rx) = tokio::sync::mpsc::channel::<AgentEvent>(64);
         let agent = self.agent.clone();
         let task = tokio::spawn(async move {
@@ -939,7 +1066,11 @@ async fn deliver_cron_result(destination: &str, job_name: &str, reply: &str) -> 
             .send()
             .await?;
         if !resp.status().is_success() {
-            anyhow::bail!("telegram sendMessage {}: {}", resp.status(), resp.text().await.unwrap_or_default());
+            anyhow::bail!(
+                "telegram sendMessage {}: {}",
+                resp.status(),
+                resp.text().await.unwrap_or_default()
+            );
         }
         Ok(true)
     } else if let Some(channel_id) = destination.strip_prefix("discord:") {
@@ -953,7 +1084,11 @@ async fn deliver_cron_result(destination: &str, job_name: &str, reply: &str) -> 
             .send()
             .await?;
         if !resp.status().is_success() {
-            anyhow::bail!("discord postMessage {}: {}", resp.status(), resp.text().await.unwrap_or_default());
+            anyhow::bail!(
+                "discord postMessage {}: {}",
+                resp.status(),
+                resp.text().await.unwrap_or_default()
+            );
         }
         Ok(true)
     } else {
@@ -1081,7 +1216,8 @@ async fn chat(cfg: Config, resume: Option<String>, want_tui: bool, no_tui: bool)
     loop {
         let input = match rl.readline("you> ") {
             Ok(line) => line,
-            Err(rustyline::error::ReadlineError::Eof) | Err(rustyline::error::ReadlineError::Interrupted) => {
+            Err(rustyline::error::ReadlineError::Eof)
+            | Err(rustyline::error::ReadlineError::Interrupted) => {
                 break;
             }
             Err(e) => return Err(e.into()),
@@ -1110,7 +1246,10 @@ async fn chat(cfg: Config, resume: Option<String>, want_tui: bool, no_tui: bool)
                 store.gc();
                 let key = store.mint(session_id.clone(), 600);
                 if let Err(e) = store.save(&path) {
-                    eprintln!("warning: failed to persist join key to {}: {e}", path.display());
+                    eprintln!(
+                        "warning: failed to persist join key to {}: {e}",
+                        path.display()
+                    );
                 }
                 println!("Join key: {key}");
                 println!("Send `/join {key}` from Telegram/Discord/Slack within 10 minutes to");
@@ -1210,12 +1349,22 @@ async fn chat(cfg: Config, resume: Option<String>, want_tui: bool, no_tui: bool)
                     AgentEvent::AssistantMessage(_) => {
                         println!();
                     }
-                    AgentEvent::ToolCallStart { name, arguments, .. } => {
+                    AgentEvent::ToolCallStart {
+                        name, arguments, ..
+                    } => {
                         let preview = preview_args(&arguments);
                         println!("\x1b[2m· tool {name} {preview}\x1b[0m");
                     }
-                    AgentEvent::ToolCallFinish { is_error, content, .. } => {
-                        let head = content.lines().next().unwrap_or("").chars().take(120).collect::<String>();
+                    AgentEvent::ToolCallFinish {
+                        is_error, content, ..
+                    } => {
+                        let head = content
+                            .lines()
+                            .next()
+                            .unwrap_or("")
+                            .chars()
+                            .take(120)
+                            .collect::<String>();
                         let tag = if is_error { "ERR" } else { "ok" };
                         println!("\x1b[2m  ↪ {tag}: {head}\x1b[0m");
                         print!("merlion> ");
@@ -1264,7 +1413,10 @@ const DEFAULT_SYSTEM_PROMPT: &str =
      in plain text.";
 
 fn build_initial_system_prompt(cfg: &Config, memory: &MemoryStore, skills: &SkillSet) -> String {
-    let base = cfg.system_prompt.as_deref().unwrap_or(DEFAULT_SYSTEM_PROMPT);
+    let base = cfg
+        .system_prompt
+        .as_deref()
+        .unwrap_or(DEFAULT_SYSTEM_PROMPT);
     let mut out = String::from(base);
     let mem_block = memory.render_context_block(2048).unwrap_or_default();
     if !mem_block.trim().is_empty() {
@@ -1282,4 +1434,3 @@ fn build_initial_system_prompt(cfg: &Config, memory: &MemoryStore, skills: &Skil
     }
     out
 }
-

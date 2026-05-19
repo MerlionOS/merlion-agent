@@ -46,11 +46,7 @@ struct FrontMatter {
 /// front-matter contains a `name` that differs from `slug`, the slug
 /// wins and a warning is emitted. The body is everything after the
 /// closing `---` delimiter, with at most one leading blank line trimmed.
-pub(crate) fn parse_skill(
-    slug: &str,
-    source_path: &Path,
-    raw: &str,
-) -> Result<Skill, ParseError> {
+pub(crate) fn parse_skill(slug: &str, source_path: &Path, raw: &str) -> Result<Skill, ParseError> {
     let (front, body) = split_front_matter(raw).ok_or(ParseError::MissingFrontMatter)?;
 
     let fm: FrontMatter = serde_yaml::from_str(front)?;
@@ -109,7 +105,10 @@ fn split_front_matter(raw: &str) -> Option<(&str, &str)> {
             let body_start = offset + line.len();
             let body = raw.get(body_start..).unwrap_or("");
             // Trim one leading newline from the body so callers see clean text.
-            let body = body.strip_prefix("\r\n").or_else(|| body.strip_prefix('\n')).unwrap_or(body);
+            let body = body
+                .strip_prefix("\r\n")
+                .or_else(|| body.strip_prefix('\n'))
+                .unwrap_or(body);
             return Some((front, body));
         }
         offset += line.len();

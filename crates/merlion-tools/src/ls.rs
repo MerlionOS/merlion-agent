@@ -53,12 +53,21 @@ impl Tool for Ls {
         ToolResult {
             tool_call_id: call_id.into(),
             name: "ls".into(),
-            content: if names.is_empty() { "(empty)".into() } else { names.join("\n") },
+            content: if names.is_empty() {
+                "(empty)".into()
+            } else {
+                names.join("\n")
+            },
             is_error: false,
         }
     }
 }
 
 fn err(call_id: &str, name: &str, msg: String) -> ToolResult {
-    ToolResult { tool_call_id: call_id.into(), name: name.into(), content: msg, is_error: true }
+    ToolResult {
+        tool_call_id: call_id.into(),
+        name: name.into(),
+        content: msg,
+        is_error: true,
+    }
 }

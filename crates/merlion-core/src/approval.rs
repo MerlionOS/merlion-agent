@@ -39,13 +39,17 @@ pub struct DenyAllApprover {
 
 impl Default for DenyAllApprover {
     fn default() -> Self {
-        Self { reason: "denied by policy".into() }
+        Self {
+            reason: "denied by policy".into(),
+        }
     }
 }
 
 #[async_trait]
 impl ToolApprover for DenyAllApprover {
     async fn approve(&self, _tool_name: &str, _args: &Value) -> ApprovalDecision {
-        ApprovalDecision::Deny { reason: self.reason.clone() }
+        ApprovalDecision::Deny {
+            reason: self.reason.clone(),
+        }
     }
 }

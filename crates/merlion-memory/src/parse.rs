@@ -111,8 +111,10 @@ pub(crate) fn render_memory(m: &Memory) -> Result<String> {
 pub(crate) fn index_row_regex() -> &'static Regex {
     static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"^\s*-\s*\[(?P<title>[^\]]+)\]\((?P<file>[^)]+)\)\s*(?:—|--|-)\s*(?P<hook>.+?)\s*$")
-            .expect("index row regex compiles")
+        Regex::new(
+            r"^\s*-\s*\[(?P<title>[^\]]+)\]\((?P<file>[^)]+)\)\s*(?:—|--|-)\s*(?P<hook>.+?)\s*$",
+        )
+        .expect("index row regex compiles")
     })
 }
 
@@ -129,7 +131,12 @@ pub(crate) fn parse_index(text: &str) -> Vec<MemoryRow> {
                 .strip_suffix(".md")
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| file.clone());
-            Some(MemoryRow { name, title, hook, file })
+            Some(MemoryRow {
+                name,
+                title,
+                hook,
+                file,
+            })
         })
         .collect()
 }
@@ -167,12 +174,7 @@ pub(crate) fn index_line_for(name: &str, title: &str, hook: &str) -> String {
 
 /// Update or append the index line for `name` in `index_text`. Returns the
 /// rewritten index. Existing non-matching lines are preserved verbatim.
-pub(crate) fn upsert_index_line(
-    index_text: &str,
-    name: &str,
-    title: &str,
-    hook: &str,
-) -> String {
+pub(crate) fn upsert_index_line(index_text: &str, name: &str, title: &str, hook: &str) -> String {
     let re = index_row_regex();
     let target_file = format!("{}.md", name);
     let mut lines: Vec<String> = index_text.lines().map(|l| l.to_string()).collect();

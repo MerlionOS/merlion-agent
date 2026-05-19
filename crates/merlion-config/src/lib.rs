@@ -93,21 +93,65 @@ impl Config {
         };
         let (default_base, default_env, wire) = match provider {
             "openai" => ("https://api.openai.com/v1", "OPENAI_API_KEY", Wire::OpenAi),
-            "openrouter" => ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY", Wire::OpenAi),
-            "nous" => ("https://inference-api.nousresearch.com/v1", "NOUS_API_KEY", Wire::OpenAi),
-            "novita" => ("https://api.novita.ai/v3/openai", "NOVITA_API_KEY", Wire::OpenAi),
-            "moonshot" => ("https://api.moonshot.ai/v1", "MOONSHOT_API_KEY", Wire::OpenAi),
-            "minimax" => ("https://api.minimaxi.chat/v1", "MINIMAX_API_KEY", Wire::OpenAi),
+            "openrouter" => (
+                "https://openrouter.ai/api/v1",
+                "OPENROUTER_API_KEY",
+                Wire::OpenAi,
+            ),
+            "nous" => (
+                "https://inference-api.nousresearch.com/v1",
+                "NOUS_API_KEY",
+                Wire::OpenAi,
+            ),
+            "novita" => (
+                "https://api.novita.ai/v3/openai",
+                "NOVITA_API_KEY",
+                Wire::OpenAi,
+            ),
+            "moonshot" => (
+                "https://api.moonshot.ai/v1",
+                "MOONSHOT_API_KEY",
+                Wire::OpenAi,
+            ),
+            "minimax" => (
+                "https://api.minimaxi.chat/v1",
+                "MINIMAX_API_KEY",
+                Wire::OpenAi,
+            ),
             "zai" | "glm" => ("https://api.z.ai/api/paas/v4", "ZAI_API_KEY", Wire::OpenAi),
-            "groq" => ("https://api.groq.com/openai/v1", "GROQ_API_KEY", Wire::OpenAi),
-            "deepseek" => ("https://api.deepseek.com/v1", "DEEPSEEK_API_KEY", Wire::OpenAi),
-            "anthropic" => ("https://api.anthropic.com/v1", "ANTHROPIC_API_KEY", Wire::Anthropic),
-            "gemini" => ("https://generativelanguage.googleapis.com/v1beta", "GEMINI_API_KEY", Wire::Gemini),
+            "groq" => (
+                "https://api.groq.com/openai/v1",
+                "GROQ_API_KEY",
+                Wire::OpenAi,
+            ),
+            "deepseek" => (
+                "https://api.deepseek.com/v1",
+                "DEEPSEEK_API_KEY",
+                Wire::OpenAi,
+            ),
+            "anthropic" => (
+                "https://api.anthropic.com/v1",
+                "ANTHROPIC_API_KEY",
+                Wire::Anthropic,
+            ),
+            "gemini" => (
+                "https://generativelanguage.googleapis.com/v1beta",
+                "GEMINI_API_KEY",
+                Wire::Gemini,
+            ),
             // Bedrock/Vertex don't use base_url or api_key_env — they each
             // have their own credential mechanism (SigV4 / gcloud OAuth).
             // The placeholders below are kept for `merlion doctor`'s probe.
-            "bedrock" => ("https://bedrock-runtime.us-east-1.amazonaws.com", "AWS_ACCESS_KEY_ID", Wire::Bedrock),
-            "vertex" => ("https://us-central1-aiplatform.googleapis.com", "GOOGLE_CLOUD_PROJECT", Wire::Vertex),
+            "bedrock" => (
+                "https://bedrock-runtime.us-east-1.amazonaws.com",
+                "AWS_ACCESS_KEY_ID",
+                Wire::Bedrock,
+            ),
+            "vertex" => (
+                "https://us-central1-aiplatform.googleapis.com",
+                "GOOGLE_CLOUD_PROJECT",
+                Wire::Vertex,
+            ),
             other => {
                 anyhow::bail!(
                     "unknown provider `{other}`. Set `model.base_url` and `model.api_key_env` explicitly, \
@@ -117,8 +161,16 @@ impl Config {
         };
         Ok(ResolvedProvider {
             model: model.to_string(),
-            base_url: self.model.base_url.clone().unwrap_or_else(|| default_base.to_string()),
-            api_key_env: self.model.api_key_env.clone().unwrap_or_else(|| default_env.to_string()),
+            base_url: self
+                .model
+                .base_url
+                .clone()
+                .unwrap_or_else(|| default_base.to_string()),
+            api_key_env: self
+                .model
+                .api_key_env
+                .clone()
+                .unwrap_or_else(|| default_env.to_string()),
             wire,
         })
     }
@@ -128,7 +180,9 @@ pub fn merlion_home() -> PathBuf {
     if let Ok(p) = std::env::var("MERLION_HOME") {
         return PathBuf::from(p);
     }
-    dirs::home_dir().map(|h| h.join(".merlion")).unwrap_or_else(|| PathBuf::from(".merlion"))
+    dirs::home_dir()
+        .map(|h| h.join(".merlion"))
+        .unwrap_or_else(|| PathBuf::from(".merlion"))
 }
 
 pub fn ensure_home() -> Result<PathBuf> {

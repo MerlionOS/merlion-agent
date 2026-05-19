@@ -261,7 +261,10 @@ pub fn message_from_update(u: TgUpdate) -> Option<IncomingMessage> {
     let m = match u.message {
         Some(m) => m,
         None => {
-            warn!(update_id = u.update_id, "telegram update has no message; skipping");
+            warn!(
+                update_id = u.update_id,
+                "telegram update has no message; skipping"
+            );
             return None;
         }
     };

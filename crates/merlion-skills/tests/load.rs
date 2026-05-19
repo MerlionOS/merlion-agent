@@ -83,11 +83,17 @@ fn malformed_front_matter_is_skipped_without_error() {
     );
 
     // A valid skill alongside the bad ones — it should still load.
-    write(&root.path().join("ok.md"), BAR_FLAT_SKILL.replace("bar", "ok").as_str());
+    write(
+        &root.path().join("ok.md"),
+        BAR_FLAT_SKILL.replace("bar", "ok").as_str(),
+    );
 
     let set = SkillSet::load(&[root.path()]).unwrap();
 
-    assert!(set.get("plain").is_none(), "missing front-matter should be skipped");
+    assert!(
+        set.get("plain").is_none(),
+        "missing front-matter should be skipped"
+    );
     assert!(set.get("broken").is_none(), "broken YAML should be skipped");
     assert!(set.get("ok").is_some(), "valid skill should still load");
 }

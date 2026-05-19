@@ -89,8 +89,5 @@ pub trait LlmClient: Send + Sync {
         Ok(acc)
     }
 
-    async fn stream(
-        &self,
-        req: LlmRequest,
-    ) -> Result<BoxStream<'static, Result<LlmStreamEvent>>>;
+    async fn stream(&self, req: LlmRequest) -> Result<BoxStream<'static, Result<LlmStreamEvent>>>;
 }

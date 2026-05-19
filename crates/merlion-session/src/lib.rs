@@ -98,7 +98,10 @@ impl SessionDB {
 
     pub fn append_message(&self, session_id: &str, msg: &Message) -> Result<()> {
         let now = Utc::now().to_rfc3339();
-        let role = serde_json::to_value(msg.role)?.as_str().unwrap_or("user").to_string();
+        let role = serde_json::to_value(msg.role)?
+            .as_str()
+            .unwrap_or("user")
+            .to_string();
         let payload = serde_json::to_string(msg)?;
         let next_ord: i64 = self.conn.query_row(
             "SELECT COALESCE(MAX(ord), -1) + 1 FROM messages WHERE session_id = ?",
@@ -122,9 +125,9 @@ impl SessionDB {
     }
 
     pub fn load_messages(&self, session_id: &str) -> Result<Vec<Message>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT payload FROM messages WHERE session_id = ? ORDER BY ord ASC",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT payload FROM messages WHERE session_id = ? ORDER BY ord ASC")?;
         let rows = stmt.query_map(params![session_id], |r| r.get::<_, String>(0))?;
         let mut out = Vec::new();
         for r in rows {
@@ -169,5 +172,7 @@ impl SessionDB {
 }
 
 fn parse_ts(s: String) -> DateTime<Utc> {
-    DateTime::parse_from_rfc3339(&s).map(|d| d.with_timezone(&Utc)).unwrap_or_else(|_| Utc::now())
+    DateTime::parse_from_rfc3339(&s)
+        .map(|d| d.with_timezone(&Utc))
+        .unwrap_or_else(|_| Utc::now())
 }

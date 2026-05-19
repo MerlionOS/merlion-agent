@@ -44,7 +44,11 @@ impl Tool for Edit {
             Err(e) => return err(call_id, "edit", format!("invalid arguments: {e}")),
         };
         if parsed.old_string == parsed.new_string {
-            return err(call_id, "edit", "old_string and new_string are identical".into());
+            return err(
+                call_id,
+                "edit",
+                "old_string and new_string are identical".into(),
+            );
         }
         let text = match fs::read_to_string(&parsed.path).await {
             Ok(t) => t,
@@ -72,12 +76,22 @@ impl Tool for Edit {
         ToolResult {
             tool_call_id: call_id.into(),
             name: "edit".into(),
-            content: format!("edited {} ({} replacement{})", parsed.path, count, if count == 1 { "" } else { "s" }),
+            content: format!(
+                "edited {} ({} replacement{})",
+                parsed.path,
+                count,
+                if count == 1 { "" } else { "s" }
+            ),
             is_error: false,
         }
     }
 }
 
 fn err(call_id: &str, name: &str, msg: String) -> ToolResult {
-    ToolResult { tool_call_id: call_id.into(), name: name.into(), content: msg, is_error: true }
+    ToolResult {
+        tool_call_id: call_id.into(),
+        name: name.into(),
+        content: msg,
+        is_error: true,
+    }
 }

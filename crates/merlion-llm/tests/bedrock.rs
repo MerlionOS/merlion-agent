@@ -89,8 +89,7 @@ fn sigv4_get_vanilla_vector() {
     let signature = hex(&hmac_sha256(&k_signing, string_to_sign.as_bytes()));
 
     assert_eq!(
-        signature,
-        "5fa00fa31553b73ebf1942676e86291e8372ff2a2260956d9b8aae1d763fbf31",
+        signature, "5fa00fa31553b73ebf1942676e86291e8372ff2a2260956d9b8aae1d763fbf31",
         "SigV4 get-vanilla signature mismatch — HMAC chain is broken"
     );
 }
@@ -132,12 +131,18 @@ fn sigv4_inputs_sign_produces_authorization_header() {
     let out = inputs.sign();
 
     assert!(
-        out.authorization.starts_with("AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20240101/us-east-1/bedrock/aws4_request"),
+        out.authorization.starts_with(
+            "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20240101/us-east-1/bedrock/aws4_request"
+        ),
         "authorization header missing or malformed: {}",
         out.authorization
     );
-    assert!(out.authorization.contains("SignedHeaders=host;x-amz-content-sha256;x-amz-date"));
-    assert!(out.authorization.contains(&format!("Signature={}", out.signature)));
+    assert!(out
+        .authorization
+        .contains("SignedHeaders=host;x-amz-content-sha256;x-amz-date"));
+    assert!(out
+        .authorization
+        .contains(&format!("Signature={}", out.signature)));
     assert_eq!(out.signature.len(), 64);
     assert!(out.signature.chars().all(|c| c.is_ascii_hexdigit()));
 }
@@ -161,9 +166,9 @@ fn sigv4_session_token_is_in_signed_headers() {
         payload_hash: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     };
     let out = inputs.sign();
-    assert!(out.authorization.contains(
-        "SignedHeaders=host;x-amz-content-sha256;x-amz-date;x-amz-security-token"
-    ));
+    assert!(out
+        .authorization
+        .contains("SignedHeaders=host;x-amz-content-sha256;x-amz-date;x-amz-security-token"));
 }
 
 #[test]

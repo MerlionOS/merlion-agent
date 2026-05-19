@@ -152,7 +152,12 @@ fn truncate(mut s: String, max: usize) -> String {
 }
 
 fn err(call_id: &str, msg: String) -> ToolResult {
-    ToolResult { tool_call_id: call_id.into(), name: "bash_ssh".into(), content: msg, is_error: true }
+    ToolResult {
+        tool_call_id: call_id.into(),
+        name: "bash_ssh".into(),
+        content: msg,
+        is_error: true,
+    }
 }
 
 #[cfg(test)]
@@ -163,7 +168,11 @@ mod tests {
     async fn missing_target_arg_returns_error_result() {
         let r = BashSsh.call("c1", json!({ "command": "ls" })).await;
         assert!(r.is_error);
-        assert!(r.content.contains("invalid arguments"), "got: {}", r.content);
+        assert!(
+            r.content.contains("invalid arguments"),
+            "got: {}",
+            r.content
+        );
     }
 
     #[tokio::test]

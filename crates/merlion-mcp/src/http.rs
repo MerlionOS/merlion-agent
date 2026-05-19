@@ -182,18 +182,22 @@ struct EventBoundary {
 
 fn find_event_boundary(buf: &[u8]) -> Option<EventBoundary> {
     if let Some(pos) = find_subslice(buf, b"\n\n") {
-        return Some(EventBoundary { event_len: pos, end: pos + 2 });
+        return Some(EventBoundary {
+            event_len: pos,
+            end: pos + 2,
+        });
     }
     if let Some(pos) = find_subslice(buf, b"\r\n\r\n") {
-        return Some(EventBoundary { event_len: pos, end: pos + 4 });
+        return Some(EventBoundary {
+            event_len: pos,
+            end: pos + 4,
+        });
     }
     None
 }
 
 fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack
-        .windows(needle.len())
-        .position(|w| w == needle)
+    haystack.windows(needle.len()).position(|w| w == needle)
 }
 
 fn extract_data(event_bytes: &[u8]) -> String {
@@ -224,8 +228,7 @@ impl Transport for HttpTransport {
         let (tx, rx) = oneshot::channel::<Response>();
         self.pending.lock().await.insert(id, tx);
 
-        let result =
-            tokio::time::timeout(self.request_timeout, self.do_request(id, body)).await;
+        let result = tokio::time::timeout(self.request_timeout, self.do_request(id, body)).await;
 
         // Regardless of outcome, drop the pending slot — HTTP is request-scoped
         // so nothing else will satisfy it.
@@ -266,9 +269,7 @@ impl Transport for HttpTransport {
         let status = resp.status();
         if !status.is_success() {
             let text = resp.text().await.unwrap_or_default();
-            return Err(Error::Transport(format!(
-                "http {status} on notify: {text}"
-            )));
+            return Err(Error::Transport(format!("http {status} on notify: {text}")));
         }
         // 202 with empty body is the spec-blessed shape; drain & discard.
         let _ = resp.bytes().await;

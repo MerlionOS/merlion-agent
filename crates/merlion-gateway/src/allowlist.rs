@@ -36,7 +36,10 @@ impl Allowlist {
                 per_platform.insert(platform.into(), ids);
             }
         }
-        Self { per_platform, allow_all }
+        Self {
+            per_platform,
+            allow_all,
+        }
     }
 
     pub fn permits(&self, user: &User) -> bool {
@@ -64,7 +67,11 @@ mod tests {
     use super::*;
 
     fn user(platform: &str, id: &str) -> User {
-        User { platform: platform.into(), id: id.into(), display_name: "x".into() }
+        User {
+            platform: platform.into(),
+            id: id.into(),
+            display_name: "x".into(),
+        }
     }
 
     #[test]

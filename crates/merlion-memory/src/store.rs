@@ -8,8 +8,7 @@ use chrono::Utc;
 use tracing::debug;
 
 use crate::parse::{
-    parse_index, parse_memory, remove_index_line, render_memory, upsert_index_line,
-    validate_slug,
+    parse_index, parse_memory, remove_index_line, render_memory, upsert_index_line, validate_slug,
 };
 use crate::{Memory, MemoryRow, MemoryStore};
 
@@ -64,14 +63,12 @@ impl MemoryStore {
         if !path.exists() {
             return Ok(INDEX_HEADER.to_string());
         }
-        fs::read_to_string(&path)
-            .with_context(|| format!("failed to read {}", path.display()))
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))
     }
 
     fn write_index(&self, text: &str) -> Result<()> {
         let path = self.index_path();
-        fs::write(&path, text)
-            .with_context(|| format!("failed to write {}", path.display()))
+        fs::write(&path, text).with_context(|| format!("failed to write {}", path.display()))
     }
 
     /// List memories declared in `MEMORY.md`.
@@ -101,7 +98,10 @@ impl MemoryStore {
         let now = Utc::now();
         let created_at = if path.exists() {
             // Preserve the existing created_at, if we can parse it.
-            match fs::read_to_string(&path).ok().and_then(|raw| parse_memory(&raw).ok()) {
+            match fs::read_to_string(&path)
+                .ok()
+                .and_then(|raw| parse_memory(&raw).ok())
+            {
                 Some(existing) => existing.created_at,
                 None => m.created_at,
             }
@@ -120,8 +120,9 @@ impl MemoryStore {
         };
 
         let rendered = render_memory(&to_write)?;
-        fs::write(&path, rendered)
-            .with_context(|| format!("failed to write memory `{}` at {}", m.name, path.display()))?;
+        fs::write(&path, rendered).with_context(|| {
+            format!("failed to write memory `{}` at {}", m.name, path.display())
+        })?;
 
         // Update the index. Use the slug itself as the "title" for now —
         // hand-edited titles in MEMORY.md are preserved by upsert_index_line
@@ -129,7 +130,8 @@ impl MemoryStore {
         // match, we conservatively use the slug. Hooks come from description.
         let title = to_write.name.clone();
         let index_text = self.read_index()?;
-        let new_index = upsert_index_line(&index_text, &to_write.name, &title, &to_write.description);
+        let new_index =
+            upsert_index_line(&index_text, &to_write.name, &title, &to_write.description);
         self.write_index(&new_index)?;
 
         debug!(name = %to_write.name, "wrote memory");
@@ -142,8 +144,9 @@ impl MemoryStore {
         validate_slug(name)?;
         let path = self.memory_path(name);
         if path.exists() {
-            fs::remove_file(&path)
-                .with_context(|| format!("failed to remove memory `{}` at {}", name, path.display()))?;
+            fs::remove_file(&path).with_context(|| {
+                format!("failed to remove memory `{}` at {}", name, path.display())
+            })?;
         }
         let index_text = self.read_index()?;
         let new_index = remove_index_line(&index_text, name);
