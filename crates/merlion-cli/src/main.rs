@@ -26,6 +26,7 @@ mod backup_cmd;
 mod completion;
 mod curator_cmd;
 mod fallback_cmd;
+mod gateway_service;
 mod logs;
 mod setup;
 mod skills_cmd;
@@ -204,10 +205,38 @@ enum Command {
 
 #[derive(Debug, Subcommand)]
 enum GatewayAction {
-    /// Start the gateway daemon. Reads TELEGRAM_BOT_TOKEN +
-    /// MERLION_GATEWAY_ALLOW_TELEGRAM from the environment.
+    /// Run the gateway in the foreground. Reads TELEGRAM_BOT_TOKEN,
+    /// DISCORD_BOT_TOKEN, SLACK_APP_TOKEN+SLACK_BOT_TOKEN, and
+    /// MERLION_GATEWAY_ALLOW_* from the environment. Stays in the
+    /// foreground until interrupted — this is what the installed service
+    /// runs under the hood.
+    Run,
+    /// Install the gateway as a background service. Writes a launchd
+    /// LaunchAgent (macOS) or systemd --user unit (Linux), then bootstraps
+    /// it so it starts at login and respawns on failure.
+    Install,
+    /// Stop and remove the installed background service.
+    Uninstall,
+    /// Start the installed background service (no-op if already running).
     Start,
-    /// Print expected env-var configuration.
+    /// Stop the installed background service.
+    Stop,
+    /// Restart the installed background service.
+    Restart,
+    /// Tail `~/.merlion/logs/gateway.log` (or `gateway.error.log` with
+    /// `--errors`). Add `-f` to follow live output.
+    Logs {
+        /// Follow new log lines (like `tail -f`).
+        #[arg(short, long)]
+        follow: bool,
+        /// Show the stderr log instead of the stdout log.
+        #[arg(long)]
+        errors: bool,
+        /// How many lines to print before following / exiting.
+        #[arg(short = 'n', long, default_value_t = 50)]
+        lines: usize,
+    },
+    /// Print env-var configuration *and* the background service state.
     Status,
 }
 
@@ -806,6 +835,22 @@ fn doctor(cfg: Config) -> Result<()> {
             if set { "set" } else { "MISSING" }
         );
     }
+    match gateway_service::service_status() {
+        Ok(gateway_service::ServiceState::NotInstalled) => {
+            println!("service:           not installed");
+        }
+        Ok(gateway_service::ServiceState::Stopped { .. }) => {
+            println!("service:           installed, stopped");
+        }
+        Ok(gateway_service::ServiceState::Running { pid, .. }) => match pid {
+            Some(p) => println!("service:           running (pid {p})"),
+            None => println!("service:           running"),
+        },
+        Ok(gateway_service::ServiceState::Unknown { detail, .. }) => {
+            println!("service:           unknown ({detail})");
+        }
+        Err(_) => {}
+    }
 
     // Cron
     println!("\n— cron —");
@@ -1104,10 +1149,95 @@ async fn gateway_cmd(cfg: Config, action: GatewayAction) -> Result<()> {
             );
             println!();
             println!("Set `MERLION_GATEWAY_ALLOW_ALL=1` to admit any user (development only).");
+            print_service_status();
             Ok(())
         }
-        GatewayAction::Start => start_gateways(cfg).await,
+        GatewayAction::Run => start_gateways(cfg).await,
+        GatewayAction::Install => gateway_service::install(),
+        GatewayAction::Uninstall => gateway_service::uninstall(),
+        GatewayAction::Start => gateway_service::start(),
+        GatewayAction::Stop => gateway_service::stop(),
+        GatewayAction::Restart => gateway_service::restart(),
+        GatewayAction::Logs {
+            follow,
+            errors,
+            lines,
+        } => gateway_logs(follow, errors, lines).await,
     }
+}
+
+fn print_service_status() {
+    println!();
+    println!("— service —");
+    match gateway_service::service_status() {
+        Ok(gateway_service::ServiceState::NotInstalled) => {
+            println!(
+                "not installed. Run `merlion gateway install` to set up a background service,"
+            );
+            println!("or `merlion gateway run` to stay in the foreground.");
+        }
+        Ok(gateway_service::ServiceState::Stopped { unit_path }) => {
+            println!("installed at {}", unit_path.display());
+            println!("state: stopped. Start with `merlion gateway start`.");
+        }
+        Ok(gateway_service::ServiceState::Running {
+            unit_path,
+            pid,
+            last_exit,
+        }) => {
+            println!("installed at {}", unit_path.display());
+            print!("state: running");
+            if let Some(p) = pid {
+                print!(" (pid {p})");
+            }
+            if let Some(c) = last_exit {
+                print!(", last exit {c}");
+            }
+            println!();
+        }
+        Ok(gateway_service::ServiceState::Unknown { unit_path, detail }) => {
+            println!("installed at {}", unit_path.display());
+            println!("state: unknown — {detail}");
+        }
+        Err(e) => {
+            println!("(could not inspect service state: {e})");
+        }
+    }
+    let home = merlion_config::merlion_home();
+    println!(
+        "logs:  {} and {}",
+        home.join("logs/gateway.log").display(),
+        home.join("logs/gateway.error.log").display(),
+    );
+}
+
+async fn gateway_logs(follow: bool, errors: bool, lines: usize) -> Result<()> {
+    let home = merlion_config::merlion_home();
+    let path = if errors {
+        home.join("logs/gateway.error.log")
+    } else {
+        home.join("logs/gateway.log")
+    };
+    if !path.exists() {
+        println!("(no log file at {} yet)", path.display());
+        return Ok(());
+    }
+    // Shell out to `tail` — portable enough on macOS + Linux and avoids
+    // reimplementing follow-mode in Rust just for one command.
+    let mut cmd = tokio::process::Command::new("tail");
+    cmd.arg("-n").arg(lines.to_string());
+    if follow {
+        cmd.arg("-f");
+    }
+    cmd.arg(&path);
+    let status = cmd
+        .status()
+        .await
+        .with_context(|| format!("spawning tail on {}", path.display()))?;
+    if !status.success() && !follow {
+        return Err(anyhow::anyhow!("tail exited with {status}"));
+    }
+    Ok(())
 }
 
 fn yes_no(b: bool) -> &'static str {
