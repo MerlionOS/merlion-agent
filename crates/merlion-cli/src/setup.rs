@@ -15,44 +15,200 @@ use anyhow::{Context, Result};
 use dialoguer::{theme::ColorfulTheme, Input, Password, Select};
 use merlion_config::{ensure_home, merlion_home, Config, ModelConfig};
 
-/// The full list of provider prefixes accepted by
-/// [`merlion_config::Config::resolve_provider`]. Kept in the same order as
-/// the resolver so the picker UI matches the docs.
+/// A catalog entry for one provider preset. Drives the interactive
+/// `merlion model` and `merlion setup` wizards: friendly label for the
+/// provider picker, env-var name for the API-key prompt, and a curated
+/// list of popular models for the model picker.
+///
+/// `prefix` must match a branch in
+/// [`merlion_config::Config::resolve_provider`] — the
+/// `catalog_prefixes_match_resolver` test enforces this.
+pub struct ProviderEntry {
+    pub prefix: &'static str,
+    pub label: &'static str,
+    /// Default API-key env var. Kept in the catalog for documentation +
+    /// for `catalog_prefixes_match_resolver` to assert it matches what
+    /// `resolve_provider` would compute; live wizard code reads the env
+    /// var name via `cfg.resolve_provider()` so user overrides of
+    /// `model.api_key_env` still take effect.
+    #[allow(dead_code)]
+    pub api_key_env: &'static str,
+    pub models: &'static [&'static str],
+}
+
+impl ProviderEntry {
+    pub fn default_model(&self) -> &'static str {
+        self.models
+            .first()
+            .copied()
+            .expect("each ProviderEntry must list at least one model")
+    }
+}
+
+/// Provider + model catalog. Ordered with the entries most useful for a
+/// Claude-Code-style coding workflow first (Anthropic, OpenAI, OpenRouter,
+/// Gemini), then the rest grouped roughly by ecosystem.
+///
+/// Curated as of Jan 2026 — model lists will go stale; users can always
+/// pick "Enter custom model name…" in the wizard, and `merlion model
+/// <provider:model>` accepts any string.
+pub const CATALOG: &[ProviderEntry] = &[
+    ProviderEntry {
+        prefix: "anthropic",
+        label: "Anthropic (Claude — direct API)",
+        api_key_env: "ANTHROPIC_API_KEY",
+        // First entry is the wizard default — picked claude-sonnet-4 as a
+        // balanced cost/quality starting point; users wanting Opus or
+        // Haiku can pick from the list below.
+        models: &[
+            "claude-sonnet-4",
+            "claude-opus-4-7",
+            "claude-sonnet-4-6",
+            "claude-haiku-4-5",
+            "claude-opus-4",
+        ],
+    },
+    ProviderEntry {
+        prefix: "openai",
+        label: "OpenAI (gpt-4o family, o1 reasoning)",
+        api_key_env: "OPENAI_API_KEY",
+        models: &[
+            "gpt-4o-mini",
+            "gpt-4o",
+            "gpt-4-turbo",
+            "o1-preview",
+            "o1-mini",
+        ],
+    },
+    ProviderEntry {
+        prefix: "openrouter",
+        label: "OpenRouter (100+ models, pay-per-use)",
+        api_key_env: "OPENROUTER_API_KEY",
+        models: &[
+            "anthropic/claude-sonnet-4",
+            "anthropic/claude-opus-4",
+            "openai/gpt-4o",
+            "google/gemini-2.0-flash",
+            "meta-llama/llama-3.3-70b-instruct",
+        ],
+    },
+    ProviderEntry {
+        prefix: "gemini",
+        label: "Google AI Studio (Gemini — direct API)",
+        api_key_env: "GEMINI_API_KEY",
+        models: &[
+            "gemini-2.0-flash",
+            "gemini-1.5-pro",
+            "gemini-1.5-flash",
+            "gemini-2.0-flash-thinking-exp",
+        ],
+    },
+    ProviderEntry {
+        prefix: "groq",
+        label: "Groq (LPU inference — fast Llama, Mixtral)",
+        api_key_env: "GROQ_API_KEY",
+        models: &[
+            "llama-3.3-70b-versatile",
+            "llama-3.1-8b-instant",
+            "mixtral-8x7b-32768",
+            "deepseek-r1-distill-llama-70b",
+        ],
+    },
+    ProviderEntry {
+        prefix: "deepseek",
+        label: "DeepSeek (V3, R1, coder — direct API)",
+        api_key_env: "DEEPSEEK_API_KEY",
+        models: &["deepseek-chat", "deepseek-coder", "deepseek-reasoner"],
+    },
+    ProviderEntry {
+        prefix: "moonshot",
+        label: "Moonshot (Kimi K2 — global API)",
+        api_key_env: "MOONSHOT_API_KEY",
+        models: &[
+            "kimi-k2-0905-preview",
+            "moonshot-v1-128k",
+            "moonshot-v1-32k",
+            "moonshot-v1-8k",
+        ],
+    },
+    ProviderEntry {
+        prefix: "minimax",
+        label: "MiniMax (M2 / Text-01 — global API)",
+        api_key_env: "MINIMAX_API_KEY",
+        models: &["MiniMax-M2", "MiniMax-Text-01"],
+    },
+    ProviderEntry {
+        prefix: "zai",
+        label: "Z.AI / GLM (Zhipu — direct API)",
+        api_key_env: "ZAI_API_KEY",
+        models: &["glm-4.6", "glm-4-air", "glm-4-flash"],
+    },
+    ProviderEntry {
+        prefix: "nous",
+        label: "Nous Research (Hermes models)",
+        api_key_env: "NOUS_API_KEY",
+        models: &["Hermes-4-405B", "Hermes-3-70B"],
+    },
+    ProviderEntry {
+        prefix: "novita",
+        label: "NovitaAI (open models, GPU cloud)",
+        api_key_env: "NOVITA_API_KEY",
+        models: &[
+            "meta-llama/llama-3.3-70b-instruct",
+            "meta-llama/llama-3.1-70b-instruct",
+            "qwen/qwen-2.5-72b-instruct",
+        ],
+    },
+    ProviderEntry {
+        prefix: "bedrock",
+        label: "AWS Bedrock (Claude on AWS, SigV4)",
+        api_key_env: "AWS_ACCESS_KEY_ID",
+        models: &[
+            "anthropic.claude-3-5-sonnet-20241022-v2:0",
+            "anthropic.claude-opus-4-20250514-v1:0",
+            "anthropic.claude-3-5-haiku-20241022-v1:0",
+        ],
+    },
+    ProviderEntry {
+        prefix: "vertex",
+        label: "Google Vertex AI (Gemini via gcloud)",
+        api_key_env: "GOOGLE_CLOUD_PROJECT",
+        models: &["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
+    },
+];
+
+/// Look up the catalog entry for a provider prefix (e.g. "anthropic").
+/// Returns `None` for unknown prefixes — callers should fall back to
+/// treating it as an unknown provider rather than panicking.
+pub fn catalog_entry(prefix: &str) -> Option<&'static ProviderEntry> {
+    CATALOG.iter().find(|p| p.prefix == prefix)
+}
+
+/// Flat prefix list — exposed for tests that want to iterate every known
+/// provider without going through the catalog. Not used by the wizard
+/// itself anymore (the catalog drives the order there).
+#[cfg(test)]
 const PROVIDERS: &[&str] = &[
+    "anthropic",
     "openai",
     "openrouter",
-    "nous",
-    "novita",
+    "gemini",
+    "groq",
+    "deepseek",
     "moonshot",
     "minimax",
     "zai",
-    "groq",
-    "deepseek",
-    "anthropic",
-    "gemini",
+    "nous",
+    "novita",
     "bedrock",
     "vertex",
 ];
 
-/// Sensible default model for each provider prefix. Used to seed the model
-/// `Input` prompt so first-run users don't have to know the catalog.
+#[cfg(test)]
 fn default_model_for(provider: &str) -> &'static str {
-    match provider {
-        "openai" => "gpt-4o-mini",
-        "openrouter" => "anthropic/claude-sonnet-4",
-        "nous" => "Hermes-4-405B",
-        "novita" => "meta-llama/llama-3.1-70b-instruct",
-        "moonshot" => "kimi-k2-0905-preview",
-        "minimax" => "MiniMax-M2",
-        "zai" => "glm-4.6",
-        "groq" => "llama-3.3-70b-versatile",
-        "deepseek" => "deepseek-chat",
-        "anthropic" => "claude-sonnet-4",
-        "gemini" => "gemini-2.0-flash",
-        "bedrock" => "anthropic.claude-3-5-sonnet-20241022-v2:0",
-        "vertex" => "gemini-2.0-flash",
-        _ => "gpt-4o-mini",
-    }
+    catalog_entry(provider)
+        .map(|p| p.default_model())
+        .unwrap_or("gpt-4o-mini")
 }
 
 /// Run the interactive setup wizard. Writes `~/.merlion/config.yaml`
@@ -89,33 +245,69 @@ pub async fn run() -> Result<()> {
         None => ("openai".to_string(), cfg.model.id.clone()),
     };
 
-    // Step 3 — provider picker.
-    let default_idx = PROVIDERS
+    // Step 3 — provider picker (friendly catalog labels).
+    let labels: Vec<String> = CATALOG
         .iter()
-        .position(|p| *p == current_provider)
+        .map(|e| {
+            if e.prefix == current_provider {
+                format!("{}  ← current", e.label)
+            } else {
+                e.label.to_string()
+            }
+        })
+        .collect();
+    let default_idx = CATALOG
+        .iter()
+        .position(|e| e.prefix == current_provider)
         .unwrap_or(0);
     let provider_idx = Select::with_theme(&theme)
         .with_prompt("Provider")
-        .items(PROVIDERS)
+        .items(&labels)
         .default(default_idx)
         .interact()?;
-    let provider = PROVIDERS[provider_idx];
+    let entry = &CATALOG[provider_idx];
 
-    // Step 4 — model name. If the user kept the same provider, prefer the
-    // model they had configured; otherwise fall back to the per-provider
-    // default.
-    let model_default = if provider == current_provider && !current_model.is_empty() {
-        current_model.clone()
+    // Step 4 — model picker for that provider. Curated list + "custom"
+    // escape so power users aren't locked out of unlisted models.
+    const CUSTOM: &str = "Enter custom model name…";
+    let mut model_items: Vec<String> = entry
+        .models
+        .iter()
+        .map(|m| {
+            if entry.prefix == current_provider && *m == current_model {
+                format!("{m}  ← current")
+            } else {
+                (*m).to_string()
+            }
+        })
+        .collect();
+    model_items.push(CUSTOM.to_string());
+
+    let model_default_idx = if entry.prefix == current_provider {
+        entry
+            .models
+            .iter()
+            .position(|m| *m == current_model)
+            .unwrap_or(0)
     } else {
-        default_model_for(provider).to_string()
+        0
     };
-    let model: String = Input::with_theme(&theme)
+    let model_idx = Select::with_theme(&theme)
         .with_prompt("Model")
-        .default(model_default)
-        .interact_text()?;
+        .items(&model_items)
+        .default(model_default_idx)
+        .interact()?;
+    let model = if model_idx == entry.models.len() {
+        Input::with_theme(&theme)
+            .with_prompt("Model name")
+            .default(entry.default_model().to_string())
+            .interact_text()?
+    } else {
+        entry.models[model_idx].to_string()
+    };
 
     cfg.model = ModelConfig {
-        id: format!("{provider}:{model}"),
+        id: format!("{}:{}", entry.prefix, model),
         base_url: cfg.model.base_url,
         api_key_env: cfg.model.api_key_env,
         temperature: cfg.model.temperature,
@@ -183,7 +375,7 @@ pub async fn run() -> Result<()> {
 /// Append `KEY=VALUE` to `path`, creating the file if it doesn't exist.
 /// We don't try to dedupe — `dotenvy` reads top-to-bottom and later values
 /// win, so re-running the wizard correctly overrides an earlier key.
-fn append_env_line(path: &std::path::Path, key: &str, value: &str) -> Result<()> {
+pub fn append_env_line(path: &std::path::Path, key: &str, value: &str) -> Result<()> {
     let mut f = OpenOptions::new()
         .create(true)
         .append(true)
@@ -218,6 +410,45 @@ mod tests {
             let m = default_model_for(p);
             assert!(!m.is_empty(), "no default model for `{p}`");
         }
+    }
+
+    #[test]
+    fn catalog_prefixes_match_resolver() {
+        // Every catalog prefix must round-trip through `resolve_provider`
+        // with its own first model — otherwise the wizard would happily
+        // write a `provider:model` id that the runtime can't construct.
+        for entry in CATALOG {
+            let mut cfg = Config::default();
+            cfg.model.id = format!("{}:{}", entry.prefix, entry.default_model());
+            cfg.model.base_url = None;
+            cfg.model.api_key_env = None;
+            let resolved = cfg
+                .resolve_provider()
+                .unwrap_or_else(|e| panic!("catalog entry `{}` failed resolve: {e}", entry.prefix));
+            assert_eq!(
+                resolved.api_key_env, entry.api_key_env,
+                "catalog `api_key_env` for `{}` disagrees with resolver",
+                entry.prefix
+            );
+        }
+    }
+
+    #[test]
+    fn catalog_models_nonempty() {
+        for entry in CATALOG {
+            assert!(
+                !entry.models.is_empty(),
+                "catalog entry `{}` has no models",
+                entry.prefix
+            );
+        }
+    }
+
+    #[test]
+    fn catalog_entry_lookup() {
+        assert!(catalog_entry("anthropic").is_some());
+        assert!(catalog_entry("openai").is_some());
+        assert!(catalog_entry("bogus").is_none());
     }
 
     #[test]

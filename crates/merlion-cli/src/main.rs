@@ -28,6 +28,7 @@ mod curator_cmd;
 mod fallback_cmd;
 mod gateway_service;
 mod logs;
+mod model_cmd;
 mod setup;
 mod skills_cmd;
 mod tools_cmd;
@@ -103,9 +104,13 @@ enum Command {
         #[arg(long)]
         no_tui: bool,
     },
-    /// Print or set the active model. `merlion model openai:gpt-4o-mini`
+    /// Pick a model interactively or set one directly. With no arg, walks
+    /// you through a catalog-driven provider/model picker and prompts for
+    /// the API key. With `provider:model`, sets the value and prompts for
+    /// the key only if missing. Use `merlion config show` to view the
+    /// current setting.
     Model {
-        /// New `provider:model` to switch to. Omit to print the current setting.
+        /// `provider:model` to switch to. Omit for the interactive wizard.
         id: Option<String>,
     },
     /// Show or edit the merged config.
@@ -374,7 +379,7 @@ async fn main() -> Result<()> {
             let session = session.or(resume_session);
             chat(cfg, session, tui, no_tui).await
         }
-        Command::Model { id } => model_cmd(cfg, id),
+        Command::Model { id } => model_cmd::run(cfg, id),
         Command::Config { action } => config_cmd(cfg, action),
         Command::Doctor => doctor(cfg),
         Command::Setup => setup::run().await,
@@ -704,20 +709,6 @@ fn detect_target_triple() -> Option<String> {
         ("macos", "aarch64") => Some("aarch64-apple-darwin".into()),
         _ => None,
     }
-}
-
-fn model_cmd(mut cfg: Config, id: Option<String>) -> Result<()> {
-    match id {
-        None => {
-            println!("{}", cfg.model.id);
-        }
-        Some(new_id) => {
-            cfg.model.id = new_id;
-            let path = merlion_config::save(&cfg)?;
-            println!("Set model = {} ({})", cfg.model.id, path.display());
-        }
-    }
-    Ok(())
 }
 
 fn config_cmd(cfg: Config, action: Option<ConfigAction>) -> Result<()> {
