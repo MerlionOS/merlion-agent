@@ -15,6 +15,7 @@ use anyhow::{anyhow, Context, Result};
 use std::path::{Path, PathBuf};
 use std::process::{Command as StdCommand, Output};
 
+#[cfg(target_os = "macos")]
 pub const SERVICE_LABEL: &str = "ai.merlion.gateway";
 #[cfg(target_os = "macos")]
 const PLIST_NAME: &str = "ai.merlion.gateway.plist";
@@ -379,6 +380,7 @@ fn run_capture(program: &str, args: &[&str]) -> Result<Output> {
 
 /// Extract `field <value>` from a `launchctl print` block. Returns the trimmed
 /// value with surrounding `"` and `;` stripped.
+#[cfg(target_os = "macos")]
 fn parse_field(haystack: &str, prefix: &str) -> Option<String> {
     for line in haystack.lines() {
         if let Some(rest) = line.trim().strip_prefix(prefix) {
@@ -477,6 +479,7 @@ fn render_systemd_unit(exe: &Path, stdout_log: &Path, stderr_log: &Path) -> Stri
 mod tests {
     use super::*;
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn parse_field_handles_launchctl_format() {
         let sample = r#"{
@@ -493,6 +496,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn parse_field_missing_returns_none() {
         assert_eq!(parse_field("no match here", "pid ="), None);
