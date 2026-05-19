@@ -3,11 +3,13 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use merlion_config::{Config, Wire};
+use merlion_config::{Config, FallbackChain, ModelConfig, Wire};
 use merlion_core::{
     Agent, AgentEvent, AgentOptions, Curator, LlmClient, Message, ToolApprover, ToolRegistry,
 };
-use merlion_llm::{AnthropicClient, BedrockClient, GeminiClient, OpenAiClient, VertexClient};
+use merlion_llm::{
+    AnthropicClient, BedrockClient, FallbackLlmClient, GeminiClient, OpenAiClient, VertexClient,
+};
 use merlion_mcp::{
     make_exposed_name, McpClient, McpProxyTool, McpRegistry, ServerEntry, StdioTransport,
     TransportSpec,
@@ -19,8 +21,11 @@ use merlion_tools::skill_tools::SkillToolsConfig;
 use tokio::sync::mpsc;
 
 mod approver;
+mod auth_cmd;
+mod backup_cmd;
 mod completion;
 mod curator_cmd;
+mod fallback_cmd;
 mod logs;
 mod setup;
 mod skills_cmd;
@@ -46,6 +51,38 @@ struct Cli {
     /// no subcommand).
     #[arg(short = 'c', long = "continue", global = true)]
     continue_recent: bool,
+
+    /// Resume a specific session by ID. Mutually exclusive with `--continue`.
+    #[arg(long = "resume", value_name = "SESSION_ID", global = true)]
+    resume_id: Option<String>,
+
+    /// Per-invocation model override. Format: `provider:model` or just `model`
+    /// (uses configured provider). Wins over `~/.merlion/config.yaml`.
+    /// Example: `merlion -z "x" -m anthropic:claude-sonnet-4`.
+    #[arg(short = 'm', long = "model", value_name = "MODEL", global = true)]
+    model_override: Option<String>,
+
+    /// Per-invocation provider override (e.g. `openrouter`, `anthropic`).
+    /// Combine with `-m` to override both. Defaults pulled from
+    /// `~/.merlion/config.yaml` apply when omitted.
+    #[arg(long = "provider", value_name = "PROVIDER", global = true)]
+    provider_override: Option<String>,
+
+    /// Preload one or more skills into the system prompt for this invocation.
+    /// Repeat the flag or comma-separate: `-s code-review,test-driven`.
+    #[arg(
+        short = 's',
+        long = "skills",
+        value_name = "SKILLS",
+        global = true,
+        value_delimiter = ','
+    )]
+    preload_skills: Vec<String>,
+
+    /// Bypass every approval prompt. Equivalent to `MERLION_AUTO_APPROVE=1`.
+    /// Use at your own risk — the agent can run any tool without asking.
+    #[arg(long = "yolo", global = true)]
+    yolo: bool,
 
     #[command(subcommand)]
     command: Option<Command>,
@@ -100,7 +137,7 @@ enum Command {
         #[command(subcommand)]
         action: McpAction,
     },
-    /// Run the messaging gateway (Telegram + Discord).
+    /// Run the messaging gateway (Telegram + Discord + Slack).
     Gateway {
         #[command(subcommand)]
         action: GatewayAction,
@@ -148,6 +185,21 @@ enum Command {
         #[command(subcommand)]
         action: curator_cmd::CuratorAction,
     },
+    /// Manage the fallback provider chain — tried in order when the
+    /// primary returns 429/5xx.
+    Fallback {
+        #[command(subcommand)]
+        action: fallback_cmd::FallbackAction,
+    },
+    /// Manage pooled API credentials in `~/.merlion/auth.yaml`.
+    Auth {
+        #[command(subcommand)]
+        action: auth_cmd::AuthAction,
+    },
+    /// Archive `~/.merlion/` to a tar.gz for transfer or rollback.
+    Backup(backup_cmd::BackupArgs),
+    /// Restore a tar.gz previously produced by `merlion backup`.
+    Import(backup_cmd::ImportArgs),
 }
 
 #[derive(Debug, Subcommand)]
@@ -241,17 +293,40 @@ async fn main() -> Result<()> {
     let _guard = logs::init_with_files()?;
 
     let cli = Cli::parse();
-    let cfg = merlion_config::load().context("loading config")?;
+    let mut cfg = merlion_config::load().context("loading config")?;
+
+    // --yolo flips the env var that ConsoleApprover reads at construction
+    // time. Set it before anything else so subcommands see the bypass.
+    if cli.yolo {
+        std::env::set_var("MERLION_AUTO_APPROVE", "1");
+    }
+
+    apply_model_override(&mut cfg, cli.model_override.as_deref());
+    apply_provider_override(&mut cfg, cli.provider_override.as_deref());
+
+    // --resume and --continue are mutually exclusive at the CLI surface.
+    if cli.resume_id.is_some() && cli.continue_recent {
+        anyhow::bail!("--resume and --continue are mutually exclusive");
+    }
 
     // -z/--oneshot short-circuits everything else: ignore the subcommand
     // (if any), run a single agent turn, print the assistant's final text
     // to stdout, exit.
     if let Some(prompt) = cli.oneshot.clone() {
-        return oneshot_cmd(cfg, prompt, cli.continue_recent).await;
+        let resume = cli.resume_id.clone().or_else(|| {
+            cli.continue_recent
+                .then(|| most_recent_session_id().ok())
+                .flatten()
+        });
+        return oneshot_cmd(cfg, prompt, resume, cli.preload_skills.clone()).await;
     }
 
-    // --continue resolves "most recent session" once and is fed to chat().
-    let resume_session = if cli.continue_recent {
+    // --resume <ID> or --continue (most-recent) → optional session id fed
+    // into chat(). --resume wins over --continue if both were somehow set
+    // (mutual exclusion was already enforced above).
+    let resume_session = if let Some(id) = cli.resume_id.clone() {
+        Some(id)
+    } else if cli.continue_recent {
         Some(most_recent_session_id()?)
     } else {
         None
@@ -304,7 +379,76 @@ async fn main() -> Result<()> {
         Command::Skills { action } => skills_cmd::run(action).await,
         Command::Tools { action } => tools_cmd::run(action).await,
         Command::Curator { action } => curator_cmd::run(action).await,
+        Command::Fallback { action } => fallback_cmd::run(action).await,
+        Command::Auth { action } => auth_cmd::run(action).await,
+        Command::Backup(args) => backup_cmd::run_backup(args).await,
+        Command::Import(args) => backup_cmd::run_import(args).await,
     }
+}
+
+/// Wrap a primary LLM client with a [`FallbackLlmClient`] when the user
+/// has configured a non-empty fallback chain in `~/.merlion/fallback.yaml`.
+/// Failures to build any individual fallback client are logged and skipped —
+/// a broken fallback entry should not prevent chat/-z from starting.
+fn wrap_with_fallback(primary: Arc<dyn LlmClient>, cfg: &Config) -> Arc<dyn LlmClient> {
+    let chain_cfg = match FallbackChain::load() {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to load fallback chain; using primary only");
+            return primary;
+        }
+    };
+    if chain_cfg.chain.is_empty() {
+        return primary;
+    }
+    let mut clients: Vec<Arc<dyn LlmClient>> = Vec::new();
+    let mut names: Vec<String> = vec![cfg.model.id.clone()];
+    for entry in &chain_cfg.chain {
+        let entry_cfg = Config {
+            model: ModelConfig {
+                id: entry.clone(),
+                base_url: None,
+                api_key_env: None,
+                temperature: cfg.model.temperature,
+                max_tokens: cfg.model.max_tokens,
+            },
+            system_prompt: cfg.system_prompt.clone(),
+            max_iterations: cfg.max_iterations,
+        };
+        let provider = match entry_cfg.resolve_provider() {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::warn!(entry = %entry, error = %e, "skipping invalid fallback entry");
+                continue;
+            }
+        };
+        let api_key = std::env::var(&provider.api_key_env).ok();
+        let built: Result<Arc<dyn LlmClient>> = (|| -> Result<Arc<dyn LlmClient>> {
+            let c: Arc<dyn LlmClient> = match provider.wire {
+                Wire::OpenAi => Arc::new(OpenAiClient::new(provider.base_url.clone(), api_key)?),
+                Wire::Anthropic => {
+                    Arc::new(AnthropicClient::new(provider.base_url.clone(), api_key)?)
+                }
+                Wire::Gemini => Arc::new(GeminiClient::new(provider.base_url.clone(), api_key)?),
+                Wire::Bedrock => Arc::new(BedrockClient::from_env()?),
+                Wire::Vertex => Arc::new(VertexClient::from_env()?),
+            };
+            Ok(c)
+        })();
+        match built {
+            Ok(c) => {
+                clients.push(c);
+                names.push(entry.clone());
+            }
+            Err(e) => {
+                tracing::warn!(entry = %entry, error = %e, "failed to build fallback client; skipping");
+            }
+        }
+    }
+    if clients.is_empty() {
+        return primary;
+    }
+    Arc::new(FallbackLlmClient::new(primary, clients, names))
 }
 
 fn most_recent_session_id() -> Result<String> {
@@ -314,6 +458,86 @@ fn most_recent_session_id() -> Result<String> {
         .next()
         .map(|r| r.id)
         .ok_or_else(|| anyhow::anyhow!("no sessions to continue — start one with `merlion`"))
+}
+
+/// Apply -m/--model override to `cfg.model.id`. Accepts either the full
+/// `provider:model` form (replaces both) or a bare model name (keeps the
+/// configured provider). Mutates in place.
+fn apply_model_override(cfg: &mut Config, override_val: Option<&str>) {
+    let Some(val) = override_val else { return };
+    if val.contains(':') {
+        cfg.model.id = val.to_string();
+    } else {
+        // Keep provider prefix from the current id; replace the model part.
+        if let Some((provider, _)) = cfg.model.id.split_once(':') {
+            cfg.model.id = format!("{provider}:{val}");
+        } else {
+            cfg.model.id = val.to_string();
+        }
+    }
+}
+
+/// Apply --provider override. Replaces only the provider prefix and keeps
+/// the configured model name. `merlion -m claude-sonnet-4 --provider openrouter`
+/// becomes id = `openrouter:claude-sonnet-4`.
+fn apply_provider_override(cfg: &mut Config, override_val: Option<&str>) {
+    let Some(provider) = override_val else { return };
+    let model_part = cfg
+        .model
+        .id
+        .split_once(':')
+        .map(|(_, m)| m.to_string())
+        .unwrap_or_else(|| cfg.model.id.clone());
+    cfg.model.id = format!("{provider}:{model_part}");
+}
+
+#[cfg(test)]
+#[allow(clippy::items_after_test_module)]
+mod cli_override_tests {
+    use super::*;
+    use merlion_config::{Config, ModelConfig};
+
+    fn cfg_with(id: &str) -> Config {
+        Config {
+            model: ModelConfig {
+                id: id.into(),
+                base_url: None,
+                api_key_env: None,
+                temperature: None,
+                max_tokens: None,
+            },
+            system_prompt: None,
+            max_iterations: 32,
+        }
+    }
+
+    #[test]
+    fn model_override_full_form_replaces_both() {
+        let mut c = cfg_with("openai:gpt-4o-mini");
+        apply_model_override(&mut c, Some("anthropic:claude-sonnet-4"));
+        assert_eq!(c.model.id, "anthropic:claude-sonnet-4");
+    }
+
+    #[test]
+    fn model_override_bare_keeps_provider() {
+        let mut c = cfg_with("openai:gpt-4o-mini");
+        apply_model_override(&mut c, Some("gpt-4o"));
+        assert_eq!(c.model.id, "openai:gpt-4o");
+    }
+
+    #[test]
+    fn provider_override_replaces_prefix() {
+        let mut c = cfg_with("openai:gpt-4o-mini");
+        apply_provider_override(&mut c, Some("openrouter"));
+        assert_eq!(c.model.id, "openrouter:gpt-4o-mini");
+    }
+
+    #[test]
+    fn provider_override_no_op_when_none() {
+        let mut c = cfg_with("openai:gpt-4o-mini");
+        apply_provider_override(&mut c, None);
+        assert_eq!(c.model.id, "openai:gpt-4o-mini");
+    }
 }
 
 async fn update_cmd(apply: bool) -> Result<()> {
@@ -912,6 +1136,7 @@ async fn start_gateways(cfg: Config) -> Result<()> {
         Wire::Bedrock => Arc::new(BedrockClient::from_env()?),
         Wire::Vertex => Arc::new(VertexClient::from_env()?),
     };
+    let llm = wrap_with_fallback(llm, &cfg);
 
     let mut tools = ToolRegistry::new();
     merlion_tools::register_defaults(&mut tools);
@@ -1099,6 +1324,7 @@ async fn build_cli_runner(cfg: Config) -> Result<CliJobRunner> {
         Wire::Bedrock => Arc::new(BedrockClient::from_env()?),
         Wire::Vertex => Arc::new(VertexClient::from_env()?),
     };
+    let llm = wrap_with_fallback(llm, &cfg);
     let mut tools = ToolRegistry::new();
     merlion_tools::register_defaults(&mut tools);
     let options = AgentOptions {
@@ -1224,7 +1450,12 @@ async fn deliver_cron_result(destination: &str, job_name: &str, reply: &str) -> 
 /// `git diff | merlion -z "review this"`. Prints ONLY the final assistant
 /// text to stdout (no banner, no spinner, no tool previews). Exits 0 on
 /// success, non-zero if the agent loop errored.
-async fn oneshot_cmd(cfg: Config, prompt: String, continue_recent: bool) -> Result<()> {
+async fn oneshot_cmd(
+    cfg: Config,
+    prompt: String,
+    resume_id: Option<String>,
+    preload_skills: Vec<String>,
+) -> Result<()> {
     use std::io::Read as _;
 
     // Read piped stdin if any.
@@ -1247,6 +1478,7 @@ async fn oneshot_cmd(cfg: Config, prompt: String, continue_recent: bool) -> Resu
         Wire::Bedrock => Arc::new(BedrockClient::from_env()?),
         Wire::Vertex => Arc::new(VertexClient::from_env()?),
     };
+    let llm = wrap_with_fallback(llm, &cfg);
 
     let mut tools = ToolRegistry::new();
     merlion_tools::register_defaults(&mut tools);
@@ -1268,8 +1500,8 @@ async fn oneshot_cmd(cfg: Config, prompt: String, continue_recent: bool) -> Resu
 
     // Load or initialize the conversation.
     let db = SessionDB::open_default()?;
-    let session_id = if continue_recent {
-        most_recent_session_id()?
+    let session_id = if let Some(id) = resume_id {
+        id
     } else {
         let id = uuid::Uuid::new_v4().to_string();
         db.create_session(&id, None)?;
@@ -1281,6 +1513,26 @@ async fn oneshot_cmd(cfg: Config, prompt: String, continue_recent: bool) -> Resu
         db.append_message(&session_id, &sys)?;
         messages.push(sys);
     }
+
+    // Preload requested skills as additional system messages before the
+    // user's prompt. Each skill's body becomes its own system turn.
+    if !preload_skills.is_empty() {
+        let skill_set = SkillSet::load_default().unwrap_or_default();
+        for name in &preload_skills {
+            match skill_set.get(name) {
+                Some(skill) => {
+                    let m = Message::system(format!(
+                        "[preloaded skill: {}]\n{}",
+                        skill.name, skill.body
+                    ));
+                    db.append_message(&session_id, &m)?;
+                    messages.push(m);
+                }
+                None => eprintln!("warning: skill `{name}` not found; skipping"),
+            }
+        }
+    }
+
     let user_msg = Message::user(full_prompt);
     db.append_message(&session_id, &user_msg)?;
     messages.push(user_msg);
@@ -1346,6 +1598,7 @@ async fn chat(cfg: Config, resume: Option<String>, want_tui: bool, no_tui: bool)
         Wire::Bedrock => Arc::new(BedrockClient::from_env()?),
         Wire::Vertex => Arc::new(VertexClient::from_env()?),
     };
+    let client = wrap_with_fallback(client, &cfg);
 
     let home = merlion_config::merlion_home();
     let memory_store = Arc::new(MemoryStore::open(home.join("memory"))?);

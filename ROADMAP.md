@@ -238,25 +238,25 @@ niche items deferred.
 
 | # | Flag | Why | Files | Est. | Status |
 |---|---|---|---|---|---|
-| 10.1 | `-m/--model MODEL` per-invocation override | `merlion -z "x" -m anthropic:claude-sonnet-4` without editing config | `merlion-cli/src/main.rs` | 0.25h | ⬜️ |
-| 10.2 | `--provider PROVIDER` per-invocation override | Pair with 10.1; lets `-z` use a non-default provider | `merlion-cli/src/main.rs` | 0.15h | ⬜️ |
-| 10.3 | `-s/--skills SKILLS` preload | Inject a skill body before the first user turn: `merlion -z "review" -s code-review` | `merlion-cli/src/main.rs` | 0.5h | ⬜️ |
-| 10.4 | `--resume <ID>` top-level | Symmetric with `-c`: `merlion --resume abc123` works without `chat` subcommand | `merlion-cli/src/main.rs` | 0.15h | ⬜️ |
-| 10.5 | `--yolo` flag (alias for `MERLION_AUTO_APPROVE=1`) | Discoverable; matches hermes's name | `merlion-cli/src/main.rs` | 0.1h | ⬜️ |
+| 10.1 | `-m/--model MODEL` per-invocation override | `merlion -z "x" -m anthropic:claude-sonnet-4` without editing config | `merlion-cli/src/main.rs` | 0.25h | ✅ |
+| 10.2 | `--provider PROVIDER` per-invocation override | Pair with 10.1; lets `-z` use a non-default provider | `merlion-cli/src/main.rs` | 0.15h | ✅ |
+| 10.3 | `-s/--skills SKILLS` preload | Inject a skill body before the first user turn: `merlion -z "review" -s code-review` | `merlion-cli/src/main.rs` | 0.5h | ✅ |
+| 10.4 | `--resume <ID>` top-level | Symmetric with `-c`: `merlion --resume abc123` works without `chat` subcommand | `merlion-cli/src/main.rs` | 0.15h | ✅ |
+| 10.5 | `--yolo` flag (alias for `MERLION_AUTO_APPROVE=1`) | Discoverable; matches hermes's name | `merlion-cli/src/main.rs` | 0.1h | ✅ |
 
 ### Subcommands (3)
 
 | # | Subcommand | Files | Est. | Status |
 |---|---|---|---|---|
-| 10.6 | `fallback {list,add,remove,clear}` — provider chain for 429/5xx retries | `merlion-cli/src/fallback_cmd.rs` + `merlion-config` | 1h | ⬜️ |
-| 10.7 | `auth {list,add,remove,reset}` — manage pooled API keys in `~/.merlion/auth.yaml` | `merlion-cli/src/auth_cmd.rs` | 0.75h | ⬜️ |
-| 10.8 | `backup` / `import` — tar.gz of `~/.merlion/` for transfer | `merlion-cli/src/backup_cmd.rs` | 0.5h | ⬜️ |
+| 10.6 | `fallback {list,add,remove,clear}` + `FallbackLlmClient` runtime wrapper | `merlion-cli/src/fallback_cmd.rs` + `merlion-llm/src/fallback.rs` + `merlion-config` | 1h | ✅ |
+| 10.7 | `auth {list,add,remove,reset}` — manage pooled API keys in `~/.merlion/auth.yaml` | `merlion-cli/src/auth_cmd.rs` + `merlion-config` | 0.75h | ✅ |
+| 10.8 | `backup` / `import` — tar.gz of `~/.merlion/` for transfer | `merlion-cli/src/backup_cmd.rs` | 0.5h | ✅ |
 
 ### Cosmetic fix
 
 | # | Item | Status |
 |---|---|---|
-| 10.9 | `Gateway` doc: "Telegram + Discord" → "Telegram + Discord + Slack" | ⬜️ |
+| 10.9 | `Gateway` doc: "Telegram + Discord" → "Telegram + Discord + Slack" | ✅ |
 
 **Acceptance:** `merlion --help` shows 8 top-level flags and ~19 subcommands;
 `merlion -z "..." -m anthropic:claude-sonnet-4 -s code-review` runs as a

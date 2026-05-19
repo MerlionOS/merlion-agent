@@ -14,3 +14,4 @@ serde_yaml.workspace = true
 dirs.workspace = true
 dotenvy.workspace = true
 tracing.workspace = true
+chrono.workspace = true
