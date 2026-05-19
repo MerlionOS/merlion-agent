@@ -47,16 +47,18 @@ dotenvy = "0.15"
 rustyline = "14.0"
 shell-escape = "0.1"
 
-merlion-core = { path = "crates/merlion-core" }
-merlion-llm = { path = "crates/merlion-llm" }
-merlion-tools = { path = "crates/merlion-tools" }
-merlion-config = { path = "crates/merlion-config" }
-merlion-session = { path = "crates/merlion-session" }
-merlion-memory = { path = "crates/merlion-memory" }
-merlion-skills = { path = "crates/merlion-skills" }
-merlion-mcp = { path = "crates/merlion-mcp" }
-merlion-gateway = { path = "crates/merlion-gateway" }
-merlion-cron = { path = "crates/merlion-cron" }
+# path + version: cargo uses `path` for local dev, `version` is what gets
+# written into the published crate metadata so dependents pull from crates.io.
+merlion-core = { path = "crates/merlion-core", version = "0.1.0" }
+merlion-llm = { path = "crates/merlion-llm", version = "0.1.0" }
+merlion-tools = { path = "crates/merlion-tools", version = "0.1.0" }
+merlion-config = { path = "crates/merlion-config", version = "0.1.0" }
+merlion-session = { path = "crates/merlion-session", version = "0.1.0" }
+merlion-memory = { path = "crates/merlion-memory", version = "0.1.0" }
+merlion-skills = { path = "crates/merlion-skills", version = "0.1.0" }
+merlion-mcp = { path = "crates/merlion-mcp", version = "0.1.0" }
+merlion-gateway = { path = "crates/merlion-gateway", version = "0.1.0" }
+merlion-cron = { path = "crates/merlion-cron", version = "0.1.0" }
 
 [profile.release]
 lto = "thin"
