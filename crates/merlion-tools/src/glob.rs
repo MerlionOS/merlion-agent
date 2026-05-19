@@ -130,29 +130,45 @@ fn err(call_id: &str, msg: String) -> ToolResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
+    /// Path to a deterministic fixture dir we build per-test. Each test
+    /// owns its own subdir under `target/glob-test/<test-name>/` so they
+    /// don't race or depend on the surrounding workspace layout.
+    fn fixture_dir(name: &str) -> PathBuf {
+        let base = std::env::temp_dir()
+            .join("merlion-glob-test")
+            .join(format!("{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        base
+    }
 
     #[tokio::test]
-    async fn finds_cargo_toml_via_toml_pattern() {
+    async fn finds_a_file_via_glob_pattern() {
+        let dir = fixture_dir("finds");
+        std::fs::write(dir.join("hello.toml"), "[package]\nname = \"x\"\n").unwrap();
         let tool = Glob;
         let args = json!({
             "pattern": "*.toml",
-            "cwd": "/Users/larry/develop/hermes-agent/merlion-agent"
+            "cwd": dir.to_str().unwrap(),
         });
         let res = tool.call("call-1", args).await;
         assert!(!res.is_error, "tool reported error: {}", res.content);
         assert!(
-            res.content.contains("Cargo.toml"),
-            "expected Cargo.toml in output, got:\n{}",
+            res.content.contains("hello.toml"),
+            "expected hello.toml in output, got:\n{}",
             res.content
         );
     }
 
     #[tokio::test]
     async fn zero_matches_returns_no_matches() {
+        let dir = fixture_dir("zero");
         let tool = Glob;
         let args = json!({
             "pattern": "this_file_definitely_does_not_exist_xyz_*.nope",
-            "cwd": "/Users/larry/develop/hermes-agent/merlion-agent"
+            "cwd": dir.to_str().unwrap(),
         });
         let res = tool.call("call-2", args).await;
         assert!(!res.is_error, "tool reported error: {}", res.content);
@@ -161,11 +177,16 @@ mod tests {
 
     #[tokio::test]
     async fn respects_max_results_and_emits_truncation_message() {
+        let dir = fixture_dir("max-results");
+        // 5 .rs files so a max_results of 2 forces truncation regardless
+        // of which file the OS lists first.
+        for i in 0..5 {
+            std::fs::write(dir.join(format!("f{i}.rs")), "// stub\n").unwrap();
+        }
         let tool = Glob;
-        // Match recursively across the workspace to ensure > 2 hits.
         let args = json!({
-            "pattern": "**/*.rs",
-            "cwd": "/Users/larry/develop/hermes-agent/merlion-agent",
+            "pattern": "*.rs",
+            "cwd": dir.to_str().unwrap(),
             "max_results": 2
         });
         let res = tool.call("call-3", args).await;
