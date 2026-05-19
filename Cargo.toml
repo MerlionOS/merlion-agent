@@ -11,6 +11,9 @@ members = [
     "crates/merlion-mcp",
     "crates/merlion-gateway",
     "crates/merlion-cron",
+    # The CLI binary crate lives under crates/merlion-cli/ but is published
+    # as `merlion-agent` (its [package].name) for naming symmetry with the
+    # repo and `pip install hermes-agent`'s convention.
     "crates/merlion-cli",
 ]
 

@@ -1,5 +1,8 @@
 [package]
-name = "merlion-cli"
+# Published as `merlion-agent` on crates.io / Homebrew / binstall to match
+# the repo + the wider hermes-agent naming convention. The bin output
+# is still `merlion` so users type the short name in a terminal.
+name = "merlion-agent"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

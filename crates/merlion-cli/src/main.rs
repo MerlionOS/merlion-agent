@@ -225,8 +225,8 @@ async fn update_cmd(apply: bool) -> Result<()> {
         println!();
         println!("To upgrade:");
         println!("  merlion update --apply        # download + swap the binary (Unix)");
-        println!("  cargo binstall merlion --version {}", latest.trim_start_matches('v'));
-        println!("  brew upgrade merlion          # if installed via Homebrew");
+        println!("  cargo binstall merlion-agent --version {}", latest.trim_start_matches('v'));
+        println!("  brew upgrade merlion-agent    # if installed via Homebrew");
         println!(
             "  curl -fsSL https://raw.githubusercontent.com/MerlionOS/merlion-agent/main/scripts/install.sh | bash"
         );

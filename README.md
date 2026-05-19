@@ -68,10 +68,10 @@ What's coming (see [ROADMAP.md](ROADMAP.md)):
 ```bash
 # Homebrew (once the tap is published):
 brew tap MerlionOS/merlion
-brew install merlion
+brew install merlion-agent
 
 # cargo-binstall:
-cargo binstall merlion
+cargo binstall merlion-agent
 
 # Manual: download from https://github.com/MerlionOS/merlion-agent/releases
 ```

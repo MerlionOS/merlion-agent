@@ -1,4 +1,4 @@
-class Merlion < Formula
+class MerlionAgent < Formula
   desc "Self-improving AI coding agent — Rust port of hermes-agent"
   homepage "https://github.com/MerlionOS/merlion-agent"
   version "0.1.0"
