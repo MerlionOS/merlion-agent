@@ -174,6 +174,10 @@ mod tests {
     /// tests both mutating the same env var collide. Serialize them.
     static ENV_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+    // Holding ENV_GUARD across await is intentional: the lock is what keeps
+    // MERLION_DOCKER_BIN stable while `.call` reads it. The lock is taken
+    // only by tests in this module; no risk of cross-task deadlock.
+    #[allow(clippy::await_holding_lock)]
     #[tokio::test]
     async fn docker_binary_missing_returns_clean_error() {
         let _g = ENV_GUARD.lock().unwrap();
@@ -204,6 +208,7 @@ mod tests {
         );
     }
 
+    #[allow(clippy::await_holding_lock)]
     #[tokio::test]
     async fn fake_docker_script_runs_and_passes_args() {
         let _g = ENV_GUARD.lock().unwrap();

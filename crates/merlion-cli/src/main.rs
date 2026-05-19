@@ -533,7 +533,7 @@ async fn mcp_cmd(action: McpAction) -> Result<()> {
                 };
                 match &entry.transport {
                     TransportSpec::Stdio { command, args, .. } => {
-                        let argline = args.iter().cloned().collect::<Vec<_>>().join(" ");
+                        let argline = args.to_vec().join(" ");
                         println!("{status}  {name}\t stdio: {command} {argline}");
                     }
                     TransportSpec::Http {
@@ -799,11 +799,13 @@ async fn start_gateways(cfg: Config) -> Result<()> {
     let mut tools = ToolRegistry::new();
     merlion_tools::register_defaults(&mut tools);
 
-    let mut options = AgentOptions::default();
-    options.model = provider.model.clone();
-    options.temperature = cfg.model.temperature;
-    options.max_tokens = cfg.model.max_tokens;
-    options.max_iterations = cfg.max_iterations;
+    let options = AgentOptions {
+        model: provider.model.clone(),
+        temperature: cfg.model.temperature,
+        max_tokens: cfg.model.max_tokens,
+        max_iterations: cfg.max_iterations,
+        ..AgentOptions::default()
+    };
     let approver: Arc<dyn ToolApprover> = Arc::new(merlion_core::AllowAllApprover);
     let agent = Arc::new(Agent::new(llm, tools, options).with_approver(approver));
 
@@ -982,9 +984,11 @@ async fn build_cli_runner(cfg: Config) -> Result<CliJobRunner> {
     };
     let mut tools = ToolRegistry::new();
     merlion_tools::register_defaults(&mut tools);
-    let mut options = AgentOptions::default();
-    options.model = provider.model.clone();
-    options.max_iterations = cfg.max_iterations;
+    let options = AgentOptions {
+        model: provider.model.clone(),
+        max_iterations: cfg.max_iterations,
+        ..AgentOptions::default()
+    };
     let approver: Arc<dyn ToolApprover> = Arc::new(merlion_core::AllowAllApprover);
     let agent = Agent::new(llm, tools, options).with_approver(approver);
     let system_prompt = cfg
@@ -1127,7 +1131,7 @@ async fn chat(cfg: Config, resume: Option<String>, want_tui: bool, no_tui: bool)
         .collect();
     let skills = SkillSet::load(&skill_roots).unwrap_or_else(|e| {
         eprintln!("warning: failed to load skills: {e}");
-        SkillSet::load(&[skills_dir.clone()]).unwrap_or_default()
+        SkillSet::load(std::slice::from_ref(&skills_dir)).unwrap_or_default()
     });
     let skill_cfg = SkillToolsConfig::new(skills_dir.clone());
 
@@ -1152,11 +1156,13 @@ async fn chat(cfg: Config, resume: Option<String>, want_tui: bool, no_tui: bool)
         }
     }
 
-    let mut options = AgentOptions::default();
-    options.model = provider.model.clone();
-    options.temperature = cfg.model.temperature;
-    options.max_tokens = cfg.model.max_tokens;
-    options.max_iterations = cfg.max_iterations;
+    let options = AgentOptions {
+        model: provider.model.clone(),
+        temperature: cfg.model.temperature,
+        max_tokens: cfg.model.max_tokens,
+        max_iterations: cfg.max_iterations,
+        ..AgentOptions::default()
+    };
 
     let approver: Arc<dyn ToolApprover> = Arc::new(approver::ConsoleApprover::new());
     let agent = Arc::new(Agent::new(client, tools, options).with_approver(approver));

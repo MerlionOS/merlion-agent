@@ -115,8 +115,7 @@ impl Tool for Grep {
                 if is_error {
                     final_content.push_str(&format!("\n[exit: {code}]"));
                 }
-                if was_truncated.is_some() {
-                    let extra = was_truncated.unwrap();
+                if let Some(extra) = was_truncated {
                     final_content.push_str(&format!("\n…[{extra} more matches, truncated]"));
                 }
                 if final_content.is_empty() {

@@ -456,7 +456,7 @@ fn handle_key_idle(app: &mut App, key: KeyEvent, skills: &SkillSet) -> KeyOutcom
                             }
                             app.status = format!(
                                 "skills: {}",
-                                many.iter().copied().collect::<Vec<_>>().join(", ")
+                                many.to_vec().join(", ")
                             );
                         }
                     }

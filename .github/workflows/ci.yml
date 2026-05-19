@@ -42,9 +42,6 @@ jobs:
 
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
-        # Clippy is intentionally non-fatal during early development; flip
-        # to required once the codebase is clippy-clean.
-        continue-on-error: true
 
       - name: cargo build
         run: cargo build --workspace --verbose

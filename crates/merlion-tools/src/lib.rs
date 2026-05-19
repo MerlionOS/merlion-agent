@@ -22,15 +22,15 @@ use merlion_memory::MemoryStore;
 
 /// Register tools that don't need any runtime configuration.
 pub fn register_defaults(reg: &mut ToolRegistry) {
-    reg.register(bash::Bash::default());
-    reg.register(read::Read::default());
-    reg.register(write::Write::default());
-    reg.register(edit::Edit::default());
-    reg.register(ls::Ls::default());
-    reg.register(grep::Grep::default());
-    reg.register(glob::Glob::default());
-    reg.register(web_fetch::WebFetch::default());
-    reg.register(web_search::WebSearch::default());
+    reg.register(bash::Bash);
+    reg.register(read::Read);
+    reg.register(write::Write);
+    reg.register(edit::Edit);
+    reg.register(ls::Ls);
+    reg.register(grep::Grep);
+    reg.register(glob::Glob);
+    reg.register(web_fetch::WebFetch);
+    reg.register(web_search::WebSearch);
 }
 
 /// Register the `memory` tool against a specific store.
@@ -49,8 +49,8 @@ pub fn register_skill_tools(reg: &mut ToolRegistry, cfg: Arc<skill_tools::SkillT
 /// when the agent is allowed to run shell commands but shouldn't touch the
 /// host filesystem directly.
 pub fn register_sandbox_bash(reg: &mut ToolRegistry) {
-    reg.register(bash_docker::BashDocker::default());
-    reg.register(bash_ssh::BashSsh::default());
+    reg.register(bash_docker::BashDocker);
+    reg.register(bash_ssh::BashSsh);
 }
 
 /// Register the `task` tool, which spawns sub-agents that share this

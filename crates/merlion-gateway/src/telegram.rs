@@ -132,10 +132,7 @@ impl TelegramGateway {
                 if next_offset > offset {
                     offset = next_offset;
                 }
-                let maybe_msg = match self.message_or_voice(update).await {
-                    Some(m) => Some(m),
-                    None => None,
-                };
+                let maybe_msg = self.message_or_voice(update).await;
                 if let Some(msg) = maybe_msg {
                     if incoming_tx.send(msg).await.is_err() {
                         return Ok(());
@@ -152,8 +149,7 @@ impl TelegramGateway {
     async fn message_or_voice(&self, u: TgUpdate) -> Option<IncomingMessage> {
         let message = u.message.as_ref();
         if let Some(m) = message {
-            if m.text.is_none() && m.voice.is_some() {
-                let voice = m.voice.as_ref().unwrap();
+            if let (None, Some(voice)) = (m.text.as_ref(), m.voice.as_ref()) {
                 let from = match m.from.as_ref() {
                     Some(f) => f,
                     None => {

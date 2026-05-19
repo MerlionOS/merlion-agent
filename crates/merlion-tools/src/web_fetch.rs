@@ -168,7 +168,7 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_non_http_url() {
-        let tool = WebFetch::default();
+        let tool = WebFetch;
         let res = tool
             .call(
                 "c1",
@@ -197,7 +197,7 @@ mod tests {
         let leaked: &'static [u8] = Box::leak(response.into_bytes().into_boxed_slice());
         let base = spawn_http_server(leaked).await;
 
-        let tool = WebFetch::default();
+        let tool = WebFetch;
         let res = tool.call("c2", json!({ "url": base })).await;
         assert!(!res.is_error, "unexpected error: {}", res.content);
         assert!(
@@ -228,7 +228,7 @@ mod tests {
         let leaked: &'static [u8] = Box::leak(response.into_bytes().into_boxed_slice());
         let base = spawn_http_server(leaked).await;
 
-        let tool = WebFetch::default();
+        let tool = WebFetch;
         let res = tool
             .call(
                 "c3",

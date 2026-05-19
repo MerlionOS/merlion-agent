@@ -82,8 +82,10 @@ mod tests {
 
     #[test]
     fn allow_all_admits_anyone() {
-        let mut a = Allowlist::default();
-        a.allow_all = true;
+        let a = Allowlist {
+            allow_all: true,
+            ..Default::default()
+        };
         assert!(a.permits(&user("telegram", "1")));
         assert!(a.permits(&user("discord", "99")));
     }

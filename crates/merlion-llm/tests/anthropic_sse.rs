@@ -44,9 +44,7 @@ async fn spawn_fixture_server(body: &'static str) -> String {
         if let Ok((mut sock, _)) = listener.accept().await {
             let mut buf = [0u8; 8192];
             let _ = tokio::io::AsyncReadExt::read(&mut sock, &mut buf).await;
-            let resp = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n"
-            );
+            let resp = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n".to_string();
             sock.write_all(resp.as_bytes()).await.unwrap();
             for chunk in body.split_inclusive("\n\n") {
                 let len = format!("{:x}\r\n", chunk.len());

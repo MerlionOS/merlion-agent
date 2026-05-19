@@ -367,7 +367,7 @@ fn chunk_for_platform(s: &str) -> Vec<String> {
         };
         let cut = cut.max(1);
         out.push(remaining[..cut].to_string());
-        remaining = &remaining[cut..].trim_start_matches('\n');
+        remaining = remaining[cut..].trim_start_matches('\n');
     }
     out
 }

@@ -34,9 +34,7 @@ async fn spawn_fixture_server(body: &'static str, expected_path_suffix: &'static
                 req.contains(expected_path_suffix),
                 "fixture server saw unexpected request path:\n{req}"
             );
-            let resp = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n"
-            );
+            let resp = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n".to_string();
             sock.write_all(resp.as_bytes()).await.unwrap();
             for chunk in body.split_inclusive("\n\n") {
                 let len = format!("{:x}\r\n", chunk.len());
