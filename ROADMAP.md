@@ -347,6 +347,24 @@ exit 0 — no `IO error: not a terminal` regression.
 
 ---
 
+## Phase 12.2 — Catalog refresh (v0.1.6, ≈0.1 session hours)
+
+User feedback after v0.1.5: the OpenAI picker didn't list gpt-5 family
+models (gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.3-codex, …) that hermes
+shows. Curated catalog had drifted relative to current OpenAI ids.
+
+| # | Item | Status |
+|---|---|---|
+| 12.2.1 | OpenAI catalog: prepend gpt-5.5 / gpt-5.4 / gpt-5.4-mini / gpt-5.3-codex / gpt-5.3-codex-spark / gpt-5.2 ahead of legacy gpt-4o/o1 entries. gpt-5.5 is the new wizard default | ✅ |
+| 12.2.2 | OpenRouter catalog: prepend openai/gpt-5.5 + openai/gpt-5.4-mini | ✅ |
+| 12.2.3 | Tests + fallback updated: `default_model_for("openai")` now `gpt-5.5`, and the unknown-provider fallback updated accordingly | ✅ |
+
+The catalog will always go stale; the "Enter custom model name…" item
+in the wizard and `merlion model <provider:model>` continue to accept
+arbitrary strings, so future drift is recoverable without a release.
+
+---
+
 ## Summary — remaining work to v1
 
 Adding up the unchecked items:
