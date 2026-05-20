@@ -78,6 +78,11 @@ pub enum Wire {
     /// print-access-token`. Reads `GOOGLE_CLOUD_PROJECT` and
     /// `GOOGLE_CLOUD_REGION` (default us-central1) from env.
     Vertex,
+    /// OpenAI Codex — shells out to the `codex` CLI so the LLM call is
+    /// billed against the user's ChatGPT subscription quota (via the
+    /// `codex login` OAuth token) instead of a per-token API key. No
+    /// HTTP base URL or API-key env var; auth lives in `~/.codex/`.
+    Codex,
 }
 
 pub struct ResolvedProvider {
@@ -154,10 +159,18 @@ impl Config {
                 "GOOGLE_CLOUD_PROJECT",
                 Wire::Vertex,
             ),
+            // Codex shells out to the local `codex` CLI; there's no HTTP
+            // base URL or env-var-driven key. The placeholders satisfy
+            // ResolvedProvider's shape but aren't read at runtime.
+            "codex" => (
+                "(codex CLI — local subprocess)",
+                "(codex login / ~/.codex/auth.json)",
+                Wire::Codex,
+            ),
             other => {
                 anyhow::bail!(
                     "unknown provider `{other}`. Set `model.base_url` and `model.api_key_env` explicitly, \
-                     or use one of: openai, openrouter, nous, novita, moonshot, minimax, zai, groq, deepseek, anthropic, gemini, bedrock, vertex."
+                     or use one of: openai, openrouter, nous, novita, moonshot, minimax, zai, groq, deepseek, anthropic, gemini, bedrock, vertex, codex."
                 );
             }
         };

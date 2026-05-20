@@ -8,6 +8,7 @@
 
 pub mod anthropic;
 pub mod bedrock;
+pub mod codex;
 pub mod fallback;
 pub mod gemini;
 pub mod openai;
@@ -16,6 +17,7 @@ pub mod vertex;
 
 pub use anthropic::AnthropicClient;
 pub use bedrock::BedrockClient;
+pub use codex::CodexClient;
 pub use fallback::FallbackLlmClient;
 pub use gemini::GeminiClient;
 pub use openai::OpenAiClient;

@@ -70,6 +70,17 @@ pub const CATALOG: &[ProviderEntry] = &[
         ],
     },
     ProviderEntry {
+        prefix: "codex",
+        label: "OpenAI Codex (ChatGPT subscription — `codex` CLI shell-out)",
+        // Codex auth is held in ~/.codex/auth.json by `codex login`, not
+        // in an env var. The catalog entry's api_key_env field is kept
+        // for documentation only.
+        api_key_env: "(codex login / ~/.codex/auth.json)",
+        // Codex routes through `codex exec` which accepts arbitrary model
+        // ids; the listed values match Codex's published model lineup.
+        models: &["gpt-5-codex", "gpt-5", "gpt-5-mini", "o3", "o3-mini"],
+    },
+    ProviderEntry {
         prefix: "openai",
         label: "OpenAI (gpt-5 family, gpt-4o, o1 reasoning)",
         api_key_env: "OPENAI_API_KEY",
@@ -213,6 +224,7 @@ const PROVIDERS: &[&str] = &[
     "novita",
     "bedrock",
     "vertex",
+    "codex",
 ];
 
 #[cfg(test)]

@@ -8,7 +8,8 @@ use merlion_core::{
     Agent, AgentEvent, AgentOptions, Curator, LlmClient, Message, ToolApprover, ToolRegistry,
 };
 use merlion_llm::{
-    AnthropicClient, BedrockClient, FallbackLlmClient, GeminiClient, OpenAiClient, VertexClient,
+    AnthropicClient, BedrockClient, CodexClient, FallbackLlmClient, GeminiClient, OpenAiClient,
+    VertexClient,
 };
 use merlion_mcp::{
     make_exposed_name, McpClient, McpProxyTool, McpRegistry, ServerEntry, StdioTransport,
@@ -499,6 +500,7 @@ fn wrap_with_fallback(primary: Arc<dyn LlmClient>, cfg: &Config) -> Arc<dyn LlmC
                 Wire::Gemini => Arc::new(GeminiClient::new(provider.base_url.clone(), api_key)?),
                 Wire::Bedrock => Arc::new(BedrockClient::from_env()?),
                 Wire::Vertex => Arc::new(VertexClient::from_env()?),
+                Wire::Codex => Arc::new(CodexClient::from_env()?),
             };
             Ok(c)
         })();
@@ -1289,6 +1291,7 @@ async fn start_gateways(cfg: Config) -> Result<()> {
         Wire::Gemini => Arc::new(GeminiClient::new(provider.base_url.clone(), api_key)?),
         Wire::Bedrock => Arc::new(BedrockClient::from_env()?),
         Wire::Vertex => Arc::new(VertexClient::from_env()?),
+        Wire::Codex => Arc::new(CodexClient::from_env()?),
     };
     let llm = wrap_with_fallback(llm, &cfg);
 
@@ -1477,6 +1480,7 @@ async fn build_cli_runner(cfg: Config) -> Result<CliJobRunner> {
         Wire::Gemini => Arc::new(GeminiClient::new(provider.base_url.clone(), api_key)?),
         Wire::Bedrock => Arc::new(BedrockClient::from_env()?),
         Wire::Vertex => Arc::new(VertexClient::from_env()?),
+        Wire::Codex => Arc::new(CodexClient::from_env()?),
     };
     let llm = wrap_with_fallback(llm, &cfg);
     let mut tools = ToolRegistry::new();
@@ -1631,6 +1635,7 @@ async fn oneshot_cmd(
         Wire::Gemini => Arc::new(GeminiClient::new(provider.base_url.clone(), api_key)?),
         Wire::Bedrock => Arc::new(BedrockClient::from_env()?),
         Wire::Vertex => Arc::new(VertexClient::from_env()?),
+        Wire::Codex => Arc::new(CodexClient::from_env()?),
     };
     let llm = wrap_with_fallback(llm, &cfg);
 
@@ -1751,6 +1756,7 @@ async fn chat(cfg: Config, resume: Option<String>, want_tui: bool, no_tui: bool)
         Wire::Gemini => Arc::new(GeminiClient::new(provider.base_url.clone(), api_key)?),
         Wire::Bedrock => Arc::new(BedrockClient::from_env()?),
         Wire::Vertex => Arc::new(VertexClient::from_env()?),
+        Wire::Codex => Arc::new(CodexClient::from_env()?),
     };
     let client = wrap_with_fallback(client, &cfg);
 
