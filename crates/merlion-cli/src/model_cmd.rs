@@ -16,6 +16,8 @@
 //! Writes `~/.merlion/config.yaml` and (if a key was entered) appends to
 //! `~/.merlion/.env`.
 
+use std::io::IsTerminal;
+
 use anyhow::{Context, Result};
 use dialoguer::{theme::ColorfulTheme, Input, Password, Select};
 use merlion_config::{ensure_home, Config, ModelConfig};
@@ -60,6 +62,21 @@ fn set_shortcut(mut cfg: Config, new_id: String) -> Result<()> {
 
 /// `merlion model` (no arg) path — catalog-driven interactive picker.
 fn wizard(mut cfg: Config) -> Result<()> {
+    // dialoguer's Select needs a real TTY for arrow-key input. When we're
+    // piped (e.g. from Claude Code's bash tool, a script, or `merlion model
+    // | tee`), fall back to printing the current setting plus a hint —
+    // erroring out with "not a terminal" was much worse UX.
+    if !std::io::stdin().is_terminal() {
+        println!("{}", cfg.model.id);
+        println!();
+        println!("(stdin is not a terminal — interactive picker disabled.)");
+        println!("To switch model from a non-TTY context, pass it as an argument:");
+        println!("  merlion model anthropic:claude-sonnet-4");
+        println!("  merlion model openrouter:anthropic/claude-sonnet-4");
+        println!("Or run `merlion model` from a real terminal for the picker.");
+        return Ok(());
+    }
+
     let theme = ColorfulTheme::default();
     let home = ensure_home()?;
     let env_path = home.join(".env");
