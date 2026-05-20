@@ -121,10 +121,19 @@ enum Command {
     /// Diagnose configuration and credentials. Alias: `status`.
     #[command(alias = "status")]
     Doctor,
-    /// Interactive first-run wizard. Walks you through picking a provider,
-    /// model, API key, and optional system prompt; writes ~/.merlion/config.yaml
-    /// and ~/.merlion/.env.
-    Setup,
+    /// Interactive setup wizard. Walks every section (inference provider,
+    /// messaging gateway, agent defaults) and writes
+    /// `~/.merlion/config.yaml` + `~/.merlion/.env`. With a section
+    /// argument (`model`, `gateway`, `agent`) jumps straight to that
+    /// section. Pass `--quick` to skip sections where every value is
+    /// already configured.
+    Setup {
+        /// Which section to run. Omit to run the full wizard.
+        section: Option<SetupSection>,
+        /// Only prompt for values that aren't yet configured.
+        #[arg(long)]
+        quick: bool,
+    },
     /// Print version info (same as `--version`).
     Version,
     /// Emit a shell-completion script to stdout.
@@ -206,6 +215,27 @@ enum Command {
     Backup(backup_cmd::BackupArgs),
     /// Restore a tar.gz previously produced by `merlion backup`.
     Import(backup_cmd::ImportArgs),
+}
+
+/// Section selector for `merlion setup [SECTION]`.
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum SetupSection {
+    /// Inference provider, model, and API key.
+    Model,
+    /// Telegram / Discord / Slack tokens and allowlists.
+    Gateway,
+    /// System prompt and agent defaults.
+    Agent,
+}
+
+impl From<SetupSection> for setup::Section {
+    fn from(s: SetupSection) -> Self {
+        match s {
+            SetupSection::Model => Self::Model,
+            SetupSection::Gateway => Self::Gateway,
+            SetupSection::Agent => Self::Agent,
+        }
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -382,7 +412,10 @@ async fn main() -> Result<()> {
         Command::Model { id } => model_cmd::run(cfg, id),
         Command::Config { action } => config_cmd(cfg, action),
         Command::Doctor => doctor(cfg),
-        Command::Setup => setup::run().await,
+        Command::Setup { section, quick } => {
+            let s = section.map(Into::into).unwrap_or(setup::Section::Full);
+            setup::run(s, quick).await
+        }
         Command::Version => {
             println!("merlion-agent {}", env!("CARGO_PKG_VERSION"));
             Ok(())

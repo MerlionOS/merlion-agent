@@ -365,6 +365,51 @@ arbitrary strings, so future drift is recoverable without a release.
 
 ---
 
+## Phase 13 — `merlion setup` parity polish (v0.1.7, ≈2 session hours)
+
+`hermes setup` is a sectional wizard: welcome banner, "you already have
+config — Enter to keep" preamble, Configuration Location panel, then
+sections for Inference Provider / Messaging Gateway / Agent, each with
+a credential health check and a 3-way prompt when keys exist. `merlion
+setup` was a flat 4-step prompt chain. Close the gap.
+
+### Visual layout
+| # | Item | Status |
+|---|---|---|
+| 13.1 | Welcome banner with magenta border + `⚕` glyph; "Ctrl+C to exit" hint | ✅ |
+| 13.2 | `◆ Section` headers (cyan, bold) for every step | ✅ |
+| 13.3 | "Reconfigure" preamble — "You already have Merlion configured ✓ / press Enter to keep" or "First-time setup…" for fresh installs | ✅ |
+| 13.4 | "Configuration Location" panel listing Config file / Secrets file / Data folder up front | ✅ |
+| 13.5 | "Next steps" footer with copy-pasteable `merlion doctor` / `merlion` lines | ✅ |
+
+### Sections
+| # | Item | Status |
+|---|---|---|
+| 13.6 | `section_inference_provider` — shows current model + provider + API-key health; 3-way prompt (Skip / Change model / Re-enter key) when key is already set; catalog-driven picker otherwise | ✅ |
+| 13.7 | `section_gateway` — Telegram / Discord / Slack each with ✓/◐/· status, opt-in `Configure {name}?` prompt, hidden-input prompts for tokens, plain Input for the user-id allowlist (Slack also asks for `SLACK_BOT_TOKEN`) | ✅ |
+| 13.8 | `section_agent` — shows current system-prompt preview (truncated to 70 chars) and `max_iterations`; prompts for system-prompt edit | ✅ |
+
+### Plumbing
+| # | Item | Status |
+|---|---|---|
+| 13.9 | `Section` enum (`Full`, `Model`, `Gateway`, `Agent`) + `pub async fn run(section, quick)` orchestrator | ✅ |
+| 13.10 | `merlion setup [model\|gateway\|agent]` subcommand picker via `clap::ValueEnum` | ✅ |
+| 13.11 | `--quick` flag — section skips when its values are already set | ✅ |
+| 13.12 | Non-TTY guard at `run` entry — fail fast with a hint to `merlion model <id>` / `merlion config edit` instead of erroring inside dialoguer | ✅ |
+
+**Deliberately out of scope:** the OAuth login branch (`hermes setup
+model` → "Reauthenticate (new OAuth login)") — Nous-portal infra. The
+3-way prompt covers the credential management UX without the OAuth
+spawn-browser flow.
+
+**Acceptance:** `merlion setup` in a real terminal shows the banner +
+Config Location panel + 3 cyan-headed sections. `merlion setup gateway`
+jumps straight to the gateway section. `merlion setup --quick` only
+prompts where something is missing. Non-TTY callers get a clear hint
+instead of "IO error: not a terminal".
+
+---
+
 ## Summary — remaining work to v1
 
 Adding up the unchecked items:
