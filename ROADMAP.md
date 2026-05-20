@@ -410,6 +410,46 @@ instead of "IO error: not a terminal".
 
 ---
 
+## Phase 14 — OpenAI Codex shell-out (v0.1.8, ≈1.5 session hours)
+
+User asked whether merlion could use a ChatGPT subscription instead of
+API key billing. OpenAI's Codex CLI (`codex`) is OAuth-authenticated
+against the ChatGPT account, so wrapping it as a merlion provider
+routes LLM calls to the subscription quota.
+
+### Wire + client
+| # | Item | Status |
+|---|---|---|
+| 14.1 | `Wire::Codex` variant + `codex` prefix in `Config::resolve_provider` (placeholder base_url / api_key_env since auth lives in `~/.codex/auth.json`) | ✅ |
+| 14.2 | `merlion-llm::CodexClient` — spawns `codex exec --json --skip-git-repo-check -m <model> -s read-only [prompt]`; parses `session_meta.payload.id`, `event_msg.payload.type=="agent_message"`, `token_count` from JSONL | ✅ |
+| 14.3 | Session resume — `Mutex<HashMap<fingerprint, codex_session_id>>` keyed by SHA-256 of (system, first user message); subsequent turns call `codex exec resume <id> "<latest user msg>"` | ✅ |
+| 14.4 | `MERLION_CODEX_BIN` to override path; `MERLION_CODEX_DANGEROUS=1` flips from `-s read-only` to `--dangerously-bypass-approvals-and-sandbox` (opt-in) | ✅ |
+
+### Plumbing
+| # | Item | Status |
+|---|---|---|
+| 14.5 | `CodexClient` re-exported from `merlion-llm`; wired into all 5 LLM construction sites in `merlion-cli/src/main.rs` (chat, oneshot, gateway, build_cli_runner, wrap_with_fallback) | ✅ |
+| 14.6 | Catalog entry: `codex` provider with friendly label and the published model lineup (gpt-5-codex, gpt-5, gpt-5-mini, o3, o3-mini) | ✅ |
+| 14.7 | Unit tests: fingerprint stability, fingerprint discriminates on system + first-user changes, latest-user-message extraction, history serialization includes all roles | ✅ |
+
+### Tradeoffs (documented in the module doc comment)
+- No per-token streaming — codex returns a single agent_message; merlion forwards one Delta + Done event.
+- Codex is itself an agent — its `bash` / `read` / `edit` calls execute inside its sandbox. Merlion's tool registry and MCP servers are bypassed when the LLM is codex.
+- Spawn-per-turn cost (~2-5s).
+- `-s read-only` sandbox by default; user opts into bypass via env var.
+
+**Deliberately out of scope:** native OAuth + Codex API protocol
+(would be ~3-4h with reverse engineering since the Codex API isn't
+publicly documented). The CLI shell-out is the path of least resistance
+and matches what `codex` users already have set up.
+
+**Acceptance:** `merlion -z "hello" -m codex:gpt-5-codex` routes the
+LLM call through the local `codex` CLI; `merlion model` → "OpenAI
+Codex (ChatGPT subscription)" appears in the provider menu with 5
+models listed.
+
+---
+
 ## Summary — remaining work to v1
 
 Adding up the unchecked items:

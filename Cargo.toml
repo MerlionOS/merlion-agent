@@ -18,7 +18,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.7"
+version = "0.1.8"
 edition = "2021"
 rust-version = "1.80"
 license = "MIT"
@@ -49,16 +49,16 @@ shell-escape = "0.1"
 
 # path + version: cargo uses `path` for local dev, `version` is what gets
 # written into the published crate metadata so dependents pull from crates.io.
-merlion-core = { path = "crates/merlion-core", version = "0.1.7" }
-merlion-llm = { path = "crates/merlion-llm", version = "0.1.7" }
-merlion-tools = { path = "crates/merlion-tools", version = "0.1.7" }
-merlion-config = { path = "crates/merlion-config", version = "0.1.7" }
-merlion-session = { path = "crates/merlion-session", version = "0.1.7" }
-merlion-memory = { path = "crates/merlion-memory", version = "0.1.7" }
-merlion-skills = { path = "crates/merlion-skills", version = "0.1.7" }
-merlion-mcp = { path = "crates/merlion-mcp", version = "0.1.7" }
-merlion-gateway = { path = "crates/merlion-gateway", version = "0.1.7" }
-merlion-cron = { path = "crates/merlion-cron", version = "0.1.7" }
+merlion-core = { path = "crates/merlion-core", version = "0.1.8" }
+merlion-llm = { path = "crates/merlion-llm", version = "0.1.8" }
+merlion-tools = { path = "crates/merlion-tools", version = "0.1.8" }
+merlion-config = { path = "crates/merlion-config", version = "0.1.8" }
+merlion-session = { path = "crates/merlion-session", version = "0.1.8" }
+merlion-memory = { path = "crates/merlion-memory", version = "0.1.8" }
+merlion-skills = { path = "crates/merlion-skills", version = "0.1.8" }
+merlion-mcp = { path = "crates/merlion-mcp", version = "0.1.8" }
+merlion-gateway = { path = "crates/merlion-gateway", version = "0.1.8" }
+merlion-cron = { path = "crates/merlion-cron", version = "0.1.8" }
 
 [profile.release]
 lto = "thin"
