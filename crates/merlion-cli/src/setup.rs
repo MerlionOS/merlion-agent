@@ -70,12 +70,20 @@ pub const CATALOG: &[ProviderEntry] = &[
     },
     ProviderEntry {
         prefix: "openai",
-        label: "OpenAI (gpt-4o family, o1 reasoning)",
+        label: "OpenAI (gpt-5 family, gpt-4o, o1 reasoning)",
         api_key_env: "OPENAI_API_KEY",
+        // First entry is the wizard default. gpt-5.5 is the current
+        // OpenAI flagship as of 2026-05; gpt-4o-mini remains the
+        // cheap-and-fast fallback at the bottom.
         models: &[
-            "gpt-4o-mini",
+            "gpt-5.5",
+            "gpt-5.4",
+            "gpt-5.4-mini",
+            "gpt-5.3-codex",
+            "gpt-5.3-codex-spark",
+            "gpt-5.2",
             "gpt-4o",
-            "gpt-4-turbo",
+            "gpt-4o-mini",
             "o1-preview",
             "o1-mini",
         ],
@@ -87,6 +95,8 @@ pub const CATALOG: &[ProviderEntry] = &[
         models: &[
             "anthropic/claude-sonnet-4",
             "anthropic/claude-opus-4",
+            "openai/gpt-5.5",
+            "openai/gpt-5.4-mini",
             "openai/gpt-4o",
             "google/gemini-2.0-flash",
             "meta-llama/llama-3.3-70b-instruct",
@@ -208,7 +218,7 @@ const PROVIDERS: &[&str] = &[
 fn default_model_for(provider: &str) -> &'static str {
     catalog_entry(provider)
         .map(|p| p.default_model())
-        .unwrap_or("gpt-4o-mini")
+        .unwrap_or("gpt-5.5")
 }
 
 /// Run the interactive setup wizard. Writes `~/.merlion/config.yaml`
@@ -453,7 +463,7 @@ mod tests {
 
     #[test]
     fn default_model_specific_providers() {
-        assert_eq!(default_model_for("openai"), "gpt-4o-mini");
+        assert_eq!(default_model_for("openai"), "gpt-5.5");
         assert_eq!(default_model_for("anthropic"), "claude-sonnet-4");
         assert_eq!(default_model_for("gemini"), "gemini-2.0-flash");
         assert_eq!(default_model_for("deepseek"), "deepseek-chat");
@@ -463,7 +473,9 @@ mod tests {
 
     #[test]
     fn default_model_unknown_falls_back() {
-        assert_eq!(default_model_for("not-a-real-provider"), "gpt-4o-mini");
+        // Unknown provider falls back to the OpenAI default — keeps the
+        // wizard's "Model" placeholder useful even for a typo'd prefix.
+        assert_eq!(default_model_for("not-a-real-provider"), "gpt-5.5");
     }
 
     #[test]
