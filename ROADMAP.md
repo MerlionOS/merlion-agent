@@ -328,6 +328,25 @@ the same picker.
 
 ---
 
+## Phase 12.1 — Model picker non-TTY fallback (v0.1.5, ≈0.15 session hours)
+
+After v0.1.4 shipped, `merlion model` (no arg) inside Claude Code's bash
+tool (or any piped context) errored with "Error: provider picker /
+Caused by: IO error: not a terminal" — dialoguer's Select needs a real
+TTY for arrow keys. Detect non-TTY at wizard entry and fall back to
+v0.1.3 behavior: print the current id, plus a hint with `merlion model
+<provider:model>` examples.
+
+| # | Item | Status |
+|---|---|---|
+| 12.1.1 | `std::io::stdin().is_terminal()` guard at `model_cmd::wizard` entry; print current model + non-TTY hint instead of erroring | ✅ |
+
+**Acceptance:** `merlion model` piped, captured, or invoked from Claude
+Code's bash tool prints `provider:model` and an explanatory hint with
+exit 0 — no `IO error: not a terminal` regression.
+
+---
+
 ## Summary — remaining work to v1
 
 Adding up the unchecked items:
