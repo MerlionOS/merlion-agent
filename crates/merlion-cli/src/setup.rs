@@ -12,8 +12,9 @@ use std::fs::OpenOptions;
 use std::io::Write as _;
 
 use anyhow::{Context, Result};
+use dialoguer::console::style;
 use dialoguer::{theme::ColorfulTheme, Input, Password, Select};
-use merlion_config::{ensure_home, merlion_home, Config, ModelConfig};
+use merlion_config::{ensure_home, Config, ModelConfig};
 
 /// A catalog entry for one provider preset. Drives the interactive
 /// `merlion model` and `merlion setup` wizards: friendly label for the
@@ -221,26 +222,43 @@ fn default_model_for(provider: &str) -> &'static str {
         .unwrap_or("gpt-5.5")
 }
 
-/// Run the interactive setup wizard. Writes `~/.merlion/config.yaml`
-/// and (if the user enters an API key) `~/.merlion/.env`. Idempotent —
-/// re-running is safe, existing values are shown as defaults.
-pub async fn run() -> Result<()> {
-    let theme = ColorfulTheme::default();
+/// Which sections to run. Mirrors `hermes setup [model|gateway|agent]`:
+/// each variant runs just that section's prompts. `Full` runs every
+/// section, showing the welcome banner and Configuration Location panel
+/// up front.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Section {
+    Full,
+    Model,
+    Gateway,
+    Agent,
+}
 
-    println!("Welcome to merlion-agent setup.");
-    println!();
-    println!(
-        "This will write {} and (optionally) {}.",
-        merlion_home().join("config.yaml").display(),
-        merlion_home().join(".env").display(),
-    );
-    println!();
-
+/// Run the interactive setup wizard.
+///
+/// - `section` picks which section(s) to run (matches `merlion setup
+///   model|gateway|agent`).
+/// - `quick = true` mirrors `hermes setup --quick`: skip prompts whose
+///   underlying value is already configured (config field or env var).
+///
+/// Writes `~/.merlion/config.yaml` and, for keys/tokens the user
+/// enters, appends to `~/.merlion/.env`. Idempotent — re-running is
+/// always safe.
+pub async fn run(section: Section, quick: bool) -> Result<()> {
+    use std::io::IsTerminal;
+    if !std::io::stdin().is_terminal() {
+        return Err(anyhow::anyhow!(
+            "`merlion setup` is interactive and needs a real terminal.\n\
+             From a non-TTY context, edit ~/.merlion/config.yaml directly,\n\
+             or use the targeted shortcuts:\n  \
+             merlion model <provider:model>\n  \
+             merlion config edit"
+        ));
+    }
     let home = ensure_home()?;
     let config_path = home.join("config.yaml");
     let env_path = home.join(".env");
 
-    // Step 2 — probe existing config so we can prefill defaults.
     let mut cfg = if config_path.exists() {
         let text = std::fs::read_to_string(&config_path)
             .with_context(|| format!("read {}", config_path.display()))?;
@@ -249,13 +267,233 @@ pub async fn run() -> Result<()> {
         Config::default()
     };
 
-    // Split current `model.id` into (provider, model) for use as defaults.
+    if section == Section::Full {
+        print_banner();
+        print_reconfigure_preamble(config_path.exists(), quick);
+        print_config_location(&config_path, &env_path, &home);
+    }
+
+    let mut wrote_config = false;
+
+    if matches!(section, Section::Full | Section::Model)
+        && section_inference_provider(&mut cfg, &env_path, quick)?
+    {
+        wrote_config = true;
+    }
+    if matches!(section, Section::Full | Section::Gateway) {
+        section_gateway(&env_path, quick)?;
+    }
+    if matches!(section, Section::Full | Section::Agent) && section_agent(&mut cfg, quick)? {
+        wrote_config = true;
+    }
+
+    if wrote_config {
+        let written = merlion_config::save(&cfg)?;
+        println!();
+        println!(
+            "{} {}",
+            style("✓").green().bold(),
+            style(format!("Wrote {}", written.display())).bold()
+        );
+    }
+
+    if section == Section::Full {
+        print_next_steps();
+    }
+
+    Ok(())
+}
+
+// ─── Visual helpers ────────────────────────────────────────────────────
+
+fn print_banner() {
+    let title = "Merlion Agent Setup Wizard";
+    let inner_width = title.chars().count() + 6;
+    let horizontal: String = "─".repeat(inner_width);
+    println!();
+    println!("  {}", style(format!("┌{horizontal}┐")).magenta());
+    println!(
+        "  {} {}   {}   {}",
+        style("│").magenta(),
+        style("⚕").magenta(),
+        style(title).bold().magenta(),
+        style("│").magenta(),
+    );
+    println!("  {}", style(format!("└{horizontal}┘")).magenta());
+    println!();
+    println!(
+        "  {}",
+        style("Let's configure your Merlion Agent installation.").dim()
+    );
+    println!("  {}", style("Press Ctrl+C at any time to exit.").dim());
+    println!();
+}
+
+fn print_reconfigure_preamble(already_configured: bool, quick: bool) {
+    section_header("Reconfigure");
+    if already_configured {
+        println!(
+            "  {} {}",
+            style("✓").green().bold(),
+            style("You already have Merlion configured.").bold()
+        );
+        if quick {
+            println!(
+                "  {}",
+                style("--quick mode — only prompting for missing values.").dim()
+            );
+        } else {
+            println!(
+                "  {}",
+                style("Each prompt shows the current value. Press Enter to keep it,").dim()
+            );
+            println!("  {}", style("or type a new value to change it.").dim());
+        }
+    } else {
+        println!(
+            "  {}",
+            style("First-time setup — let's walk through every section.").dim()
+        );
+    }
+    println!();
+    println!(
+        "  {} {}",
+        style("Tip:").dim(),
+        style("jump to a section with 'merlion setup model|gateway|agent',").dim()
+    );
+    println!(
+        "       {}",
+        style("or fill only missing items with --quick.").dim()
+    );
+    println!();
+}
+
+fn print_config_location(
+    config_path: &std::path::Path,
+    env_path: &std::path::Path,
+    home: &std::path::Path,
+) {
+    section_header("Configuration Location");
+    println!(
+        "  {} {}",
+        style("Config file: ").cyan(),
+        config_path.display()
+    );
+    println!("  {} {}", style("Secrets file:").cyan(), env_path.display());
+    println!("  {} {}", style("Data folder: ").cyan(), home.display());
+    println!();
+    println!(
+        "  {}",
+        style("You can edit these files directly or use 'merlion config edit'.").dim()
+    );
+    println!();
+}
+
+fn section_header(title: &str) {
+    println!(
+        "{} {}",
+        style("◆").cyan().bold(),
+        style(title).cyan().bold()
+    );
+}
+
+fn print_next_steps() {
+    println!();
+    section_header("Next steps");
+    println!(
+        "  {} verify config + credentials",
+        style("merlion doctor").bold()
+    );
+    println!("  {}            start chatting", style("merlion").bold());
+}
+
+// ─── Inference Provider ────────────────────────────────────────────────
+
+/// Returns `true` if `cfg.model` was changed and the config must be saved.
+fn section_inference_provider(
+    cfg: &mut Config,
+    env_path: &std::path::Path,
+    quick: bool,
+) -> Result<bool> {
+    println!();
+    section_header("Inference Provider");
+
     let (current_provider, current_model) = match cfg.model.id.split_once(':') {
         Some((p, m)) => (p.to_string(), m.to_string()),
-        None => ("openai".to_string(), cfg.model.id.clone()),
+        None => (String::new(), cfg.model.id.clone()),
     };
 
-    // Step 3 — provider picker (friendly catalog labels).
+    let resolved_key_env = cfg
+        .resolve_provider()
+        .ok()
+        .map(|p| p.api_key_env)
+        .unwrap_or_else(|| "OPENAI_API_KEY".to_string());
+    let creds_ok = std::env::var(&resolved_key_env)
+        .ok()
+        .filter(|v| !v.is_empty())
+        .is_some();
+
+    let pretty_provider = catalog_entry(&current_provider)
+        .map(|e| e.label.to_string())
+        .unwrap_or_else(|| current_provider.clone());
+
+    println!(
+        "  {} {}",
+        style("Current model:   ").dim(),
+        style(&cfg.model.id).bold()
+    );
+    println!("  {} {}", style("Active provider: ").dim(), pretty_provider);
+    println!(
+        "  {} {} {}",
+        style(format!("{resolved_key_env}:")).dim(),
+        if creds_ok {
+            style("✓").green().bold().to_string()
+        } else {
+            style("missing").red().to_string()
+        },
+        if creds_ok {
+            style("(already set in env)").dim().to_string()
+        } else {
+            String::new()
+        }
+    );
+    println!();
+
+    // --quick: if the model id is configured and creds are present, skip.
+    if quick && creds_ok && !cfg.model.id.is_empty() {
+        println!(
+            "  {}",
+            style("Skipped — model + credentials already set.").dim()
+        );
+        return Ok(false);
+    }
+
+    let theme = ColorfulTheme::default();
+
+    // 3-way credential prompt when key is already set.
+    if creds_ok && !cfg.model.id.is_empty() {
+        let choices = &[
+            "Use existing model + credentials (skip)",
+            "Change model / provider",
+            "Re-enter API key",
+        ];
+        let pick = Select::with_theme(&theme)
+            .with_prompt("What would you like to do?")
+            .items(choices)
+            .default(0)
+            .interact()?;
+        match pick {
+            0 => return Ok(false),
+            1 => { /* fall through to provider+model pickers */ }
+            2 => {
+                prompt_and_save_key(env_path, &resolved_key_env)?;
+                return Ok(false);
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    // Provider picker.
     let labels: Vec<String> = CATALOG
         .iter()
         .map(|e| {
@@ -277,8 +515,7 @@ pub async fn run() -> Result<()> {
         .interact()?;
     let entry = &CATALOG[provider_idx];
 
-    // Step 4 — model picker for that provider. Curated list + "custom"
-    // escape so power users aren't locked out of unlisted models.
+    // Model picker with "Enter custom" escape.
     const CUSTOM: &str = "Enter custom model name…";
     let mut model_items: Vec<String> = entry
         .models
@@ -318,67 +555,256 @@ pub async fn run() -> Result<()> {
 
     cfg.model = ModelConfig {
         id: format!("{}:{}", entry.prefix, model),
-        base_url: cfg.model.base_url,
-        api_key_env: cfg.model.api_key_env,
+        base_url: cfg.model.base_url.clone(),
+        api_key_env: cfg.model.api_key_env.clone(),
         temperature: cfg.model.temperature,
         max_tokens: cfg.model.max_tokens,
     };
 
-    // Step 5 — API key. We need the env-var name from `resolve_provider`
-    // (which respects any explicit `api_key_env` override the user may
-    // already have set).
-    let resolved = cfg.resolve_provider()?;
-    let key_env = resolved.api_key_env.clone();
-
-    let already_set = std::env::var(&key_env).ok().filter(|v| !v.is_empty());
-    let key_prompt = if already_set.is_some() {
-        format!("{key_env} (already set in env; press Enter to keep)")
-    } else {
-        format!("{key_env} (press Enter to skip and add it manually later)")
-    };
-
-    let api_key: String = Password::with_theme(&theme)
-        .with_prompt(key_prompt)
-        .allow_empty_password(true)
-        .interact()?;
-
-    let trimmed_key = api_key.trim();
-    if !trimmed_key.is_empty() {
-        append_env_line(&env_path, &key_env, trimmed_key)?;
-        println!("Saved {key_env} to {}", env_path.display());
-    } else if already_set.is_some() {
-        println!("Keeping existing {key_env} from environment.");
+    // API key for the (possibly new) provider.
+    let new_key_env = cfg.resolve_provider()?.api_key_env;
+    if std::env::var(&new_key_env)
+        .ok()
+        .filter(|v| !v.is_empty())
+        .is_none()
+    {
+        prompt_and_save_key(env_path, &new_key_env)?;
     } else {
         println!(
-            "No API key entered. Add `{key_env}=...` to {} before running `merlion`.",
-            env_path.display()
+            "  {} {} {}",
+            style("✓").green().bold(),
+            style(&new_key_env).bold(),
+            style("already set in env.").dim()
         );
     }
 
-    // Step 6 — optional system prompt.
-    let sys_default = cfg.system_prompt.clone().unwrap_or_default();
-    let sys_prompt: String = Input::with_theme(&theme)
-        .with_prompt("System prompt (optional, press Enter to skip)")
-        .default(sys_default)
+    Ok(true)
+}
+
+// ─── Gateway ───────────────────────────────────────────────────────────
+
+fn section_gateway(env_path: &std::path::Path, quick: bool) -> Result<()> {
+    println!();
+    section_header("Messaging Gateway (optional)");
+    println!(
+        "  {}",
+        style("Talk to merlion from Telegram / Discord / Slack. Skip if you don't").dim()
+    );
+    println!(
+        "  {}",
+        style("need it — you can always configure later with 'merlion setup gateway'.").dim()
+    );
+    println!();
+
+    let theme = ColorfulTheme::default();
+
+    let platforms = [
+        (
+            "Telegram",
+            "TELEGRAM_BOT_TOKEN",
+            "MERLION_GATEWAY_ALLOW_TELEGRAM",
+            "BotFather token (e.g. 1234567890:AAH...)",
+            "your Telegram numeric user id (comma-separated for multiple)",
+        ),
+        (
+            "Discord",
+            "DISCORD_BOT_TOKEN",
+            "MERLION_GATEWAY_ALLOW_DISCORD",
+            "Discord bot token from developer portal",
+            "your Discord user id",
+        ),
+        (
+            "Slack",
+            "SLACK_APP_TOKEN",
+            "MERLION_GATEWAY_ALLOW_SLACK",
+            "Slack app-level token (xapp-...)",
+            "your Slack user id (Uxxx)",
+        ),
+    ];
+
+    for (name, token_var, allow_var, token_hint, allow_hint) in platforms {
+        let token_set = std::env::var(token_var)
+            .ok()
+            .filter(|v| !v.is_empty())
+            .is_some();
+        let allow_set = std::env::var(allow_var)
+            .ok()
+            .filter(|v| !v.is_empty())
+            .is_some();
+
+        // Slack also needs SLACK_BOT_TOKEN; surface it briefly without
+        // making the loop hairy.
+        let slack_bot_ok = name != "Slack"
+            || std::env::var("SLACK_BOT_TOKEN")
+                .ok()
+                .filter(|v| !v.is_empty())
+                .is_some();
+
+        let status_mark = if token_set && allow_set && slack_bot_ok {
+            style("✓").green().bold()
+        } else if token_set || allow_set {
+            style("◐").yellow().bold()
+        } else {
+            style("·").dim().bold()
+        };
+        println!("  {} {}", status_mark, style(name).bold());
+        println!(
+            "      {} {}",
+            style(format!("{token_var}:")).dim(),
+            if token_set { "set" } else { "missing" }
+        );
+        if name == "Slack" {
+            println!(
+                "      {} {}",
+                style("SLACK_BOT_TOKEN:").dim(),
+                if slack_bot_ok { "set" } else { "missing" }
+            );
+        }
+        println!(
+            "      {} {}",
+            style(format!("{allow_var}:")).dim(),
+            if allow_set { "set" } else { "missing" }
+        );
+
+        if quick && token_set && allow_set && slack_bot_ok {
+            continue;
+        }
+
+        let configure = dialoguer::Confirm::with_theme(&theme)
+            .with_prompt(format!("  Configure {name}?"))
+            .default(false)
+            .interact()?;
+        if !configure {
+            continue;
+        }
+
+        if !token_set {
+            let token: String = Password::with_theme(&theme)
+                .with_prompt(format!("  {token_var} — {token_hint}"))
+                .allow_empty_password(true)
+                .interact()?;
+            if !token.trim().is_empty() {
+                append_env_line(env_path, token_var, token.trim())?;
+                println!(
+                    "    {} {}",
+                    style("✓").green(),
+                    style(format!("Saved {token_var}")).dim()
+                );
+            }
+        }
+
+        if name == "Slack" && !slack_bot_ok {
+            let bot: String = Password::with_theme(&theme)
+                .with_prompt("  SLACK_BOT_TOKEN — Slack bot OAuth token (xoxb-...)")
+                .allow_empty_password(true)
+                .interact()?;
+            if !bot.trim().is_empty() {
+                append_env_line(env_path, "SLACK_BOT_TOKEN", bot.trim())?;
+                println!(
+                    "    {} {}",
+                    style("✓").green(),
+                    style("Saved SLACK_BOT_TOKEN").dim()
+                );
+            }
+        }
+
+        if !allow_set {
+            let allow: String = Input::with_theme(&theme)
+                .with_prompt(format!("  {allow_var} — {allow_hint}"))
+                .allow_empty(true)
+                .interact_text()?;
+            if !allow.trim().is_empty() {
+                append_env_line(env_path, allow_var, allow.trim())?;
+                println!(
+                    "    {} {}",
+                    style("✓").green(),
+                    style(format!("Saved {allow_var}")).dim()
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
+
+// ─── Agent ─────────────────────────────────────────────────────────────
+
+/// Returns `true` if the system prompt was edited.
+fn section_agent(cfg: &mut Config, quick: bool) -> Result<bool> {
+    println!();
+    section_header("Agent");
+
+    let sys_current = cfg.system_prompt.clone().unwrap_or_default();
+    println!(
+        "  {} {}",
+        style("System prompt:  ").dim(),
+        if sys_current.is_empty() {
+            style("(none)").dim().to_string()
+        } else {
+            let oneline = sys_current.replace('\n', " ");
+            let preview = if oneline.chars().count() > 70 {
+                let truncated: String = oneline.chars().take(67).collect();
+                format!("{truncated}...")
+            } else {
+                oneline
+            };
+            preview
+        }
+    );
+    println!(
+        "  {} {}",
+        style("Max iterations: ").dim(),
+        cfg.max_iterations
+    );
+
+    if quick && !sys_current.is_empty() {
+        println!();
+        println!("  {}", style("Skipped — system prompt already set.").dim());
+        return Ok(false);
+    }
+    println!();
+
+    let theme = ColorfulTheme::default();
+    let sys: String = Input::with_theme(&theme)
+        .with_prompt("System prompt (optional, press Enter to keep)")
+        .default(sys_current.clone())
         .allow_empty(true)
         .interact_text()?;
-    cfg.system_prompt = if sys_prompt.trim().is_empty() {
+    let new_sys = if sys.trim().is_empty() {
         None
     } else {
-        Some(sys_prompt)
+        Some(sys)
     };
+    if new_sys == cfg.system_prompt {
+        return Ok(false);
+    }
+    cfg.system_prompt = new_sys;
+    Ok(true)
+}
 
-    // Step 7 — persist.
-    let written = merlion_config::save(&cfg)?;
-
-    // Step 8 — confirm + next steps.
-    println!();
-    println!("Wrote {}.", written.display());
-    println!();
-    println!("Next steps:");
-    println!("  merlion doctor   # verify config + credentials");
-    println!("  merlion          # start chatting");
-
+/// Prompt for an API key (hidden) and append it to `.env` if entered.
+fn prompt_and_save_key(env_path: &std::path::Path, key_env: &str) -> Result<()> {
+    let theme = ColorfulTheme::default();
+    let prompt = format!("{key_env} (press Enter to skip and add it manually later)");
+    let key: String = Password::with_theme(&theme)
+        .with_prompt(prompt)
+        .allow_empty_password(true)
+        .interact()?;
+    let trimmed = key.trim();
+    if trimmed.is_empty() {
+        println!(
+            "  {} Add `{key_env}=...` to {} before running merlion.",
+            style("·").dim(),
+            env_path.display()
+        );
+    } else {
+        append_env_line(env_path, key_env, trimmed)?;
+        println!(
+            "  {} {}",
+            style("✓").green().bold(),
+            style(format!("Saved {key_env} to {}", env_path.display())).dim()
+        );
+    }
     Ok(())
 }
 
