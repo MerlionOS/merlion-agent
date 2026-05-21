@@ -46,6 +46,13 @@ fn set_shortcut(mut cfg: Config, new_id: String) -> Result<()> {
     let path = merlion_config::save(&cfg)?;
     println!("Set model = {} ({})", cfg.model.id, path.display());
 
+    // Codex auth lives in ~/.codex/auth.json, not an env var. Skip the
+    // API-key prompt entirely and just report status.
+    if cfg.model.id.starts_with("codex:") {
+        report_codex_auth_status();
+        return Ok(());
+    }
+
     let resolved = cfg.resolve_provider()?;
     let key_env = resolved.api_key_env;
     if std::env::var(&key_env)
@@ -131,7 +138,12 @@ fn wizard(mut cfg: Config) -> Result<()> {
     println!();
     println!("Set model = {} ({})", cfg.model.id, path.display());
 
-    // ── Step 3 — API key (only if not already in env) ───────────────────
+    // ── Step 3 — credentials (codex uses ~/.codex/auth.json, not env) ───
+    if entry.prefix == "codex" {
+        report_codex_auth_status();
+        return Ok(());
+    }
+
     let resolved = cfg.resolve_provider()?;
     let key_env = resolved.api_key_env;
     if std::env::var(&key_env)
@@ -230,6 +242,24 @@ fn prompt_and_save_key(env_path: &std::path::Path, key_env: &str) -> Result<()> 
         println!("Saved {key_env} to {}", env_path.display());
     }
     Ok(())
+}
+
+/// Resolve a `provider:model` id into a catalog entry if possible. Used by
+/// `merlion doctor` and friends to print a friendly label for the current
+/// selection.
+#[allow(dead_code)]
+/// For the `codex` provider, auth is held in `~/.codex/auth.json` (after
+/// `codex login`), not in an env var. Skip the API-key prompt and just
+/// report whether auth is present, with a clear hint when it isn't.
+fn report_codex_auth_status() {
+    let auth = dirs::home_dir().map(|h| h.join(".codex/auth.json"));
+    let exists = auth.as_ref().map(|p| p.exists()).unwrap_or(false);
+    if exists {
+        println!("Codex auth detected ({}).", auth.unwrap().display());
+    } else {
+        println!("Codex auth not found. Run `codex login` to authenticate;");
+        println!("the token will be saved to ~/.codex/auth.json.");
+    }
 }
 
 /// Resolve a `provider:model` id into a catalog entry if possible. Used by
