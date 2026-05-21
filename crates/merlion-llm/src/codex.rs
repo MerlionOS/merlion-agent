@@ -166,7 +166,11 @@ impl LlmClient for CodexClient {
             cmd.arg(prompt);
         }
 
-        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+        // Close stdin to suppress codex's "Reading additional input from
+        // stdin..." informational line and prevent any blocking read.
+        cmd.stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
         let mut child = cmd
             .spawn()
             .map_err(|e| Error::Llm(format!("spawn `{}`: {e}", self.bin)))?;
@@ -193,48 +197,63 @@ impl LlmClient for CodexClient {
                 Ok(v) => v,
                 Err(_) => continue,
             };
+            // codex exec --json event schema (codex-cli 0.130.0):
+            //   {"type":"thread.started","thread_id":"<uuid>"}
+            //   {"type":"turn.started"}
+            //   {"type":"item.completed","item":{"type":"agent_message","text":"..."}}
+            //   {"type":"turn.completed","usage":{"input_tokens":N,"output_tokens":N,...}}
+            //   {"type":"turn.failed","error":{"message":"..."}}
+            //   {"type":"error","message":"..."}
             let kind = v.get("type").and_then(|t| t.as_str()).unwrap_or("");
-            let payload = v.get("payload");
             match kind {
-                "session_meta" => {
-                    if let Some(id) = payload.and_then(|p| p.get("id")).and_then(|i| i.as_str()) {
+                "thread.started" => {
+                    if let Some(id) = v.get("thread_id").and_then(|i| i.as_str()) {
                         new_session_id = Some(id.to_string());
                     }
                 }
-                "event_msg" => {
-                    let ptype = payload
-                        .and_then(|p| p.get("type"))
+                "item.completed" => {
+                    let item = v.get("item");
+                    let itype = item
+                        .and_then(|i| i.get("type"))
                         .and_then(|t| t.as_str())
                         .unwrap_or("");
-                    match ptype {
-                        "agent_message" => {
-                            if let Some(text) = payload
-                                .and_then(|p| p.get("message"))
-                                .and_then(|m| m.as_str())
-                            {
-                                if !content.is_empty() {
-                                    content.push_str("\n\n");
-                                }
-                                content.push_str(text);
+                    if itype == "agent_message" {
+                        if let Some(text) =
+                            item.and_then(|i| i.get("text")).and_then(|t| t.as_str())
+                        {
+                            if !content.is_empty() {
+                                content.push_str("\n\n");
                             }
+                            content.push_str(text);
                         }
-                        "token_count" => {
-                            let pt = payload
-                                .and_then(|p| p.get("input_tokens"))
-                                .and_then(|n| n.as_u64())
-                                .map(|n| n as u32);
-                            let ct = payload
-                                .and_then(|p| p.get("output_tokens"))
-                                .and_then(|n| n.as_u64())
-                                .map(|n| n as u32);
-                            usage = Some(Usage {
-                                prompt_tokens: pt,
-                                completion_tokens: ct,
-                                total_tokens: pt.and_then(|p| ct.map(|c| p + c)).or(pt).or(ct),
-                            });
-                        }
-                        _ => {}
                     }
+                }
+                "turn.completed" => {
+                    let u = v.get("usage");
+                    let pt = u
+                        .and_then(|u| u.get("input_tokens"))
+                        .and_then(|n| n.as_u64())
+                        .map(|n| n as u32);
+                    let ct = u
+                        .and_then(|u| u.get("output_tokens"))
+                        .and_then(|n| n.as_u64())
+                        .map(|n| n as u32);
+                    if pt.is_some() || ct.is_some() {
+                        usage = Some(Usage {
+                            prompt_tokens: pt,
+                            completion_tokens: ct,
+                            total_tokens: pt.and_then(|p| ct.map(|c| p + c)).or(pt).or(ct),
+                        });
+                    }
+                }
+                "turn.failed" | "error" => {
+                    let msg = v
+                        .get("error")
+                        .and_then(|e| e.get("message"))
+                        .and_then(|m| m.as_str())
+                        .or_else(|| v.get("message").and_then(|m| m.as_str()))
+                        .unwrap_or("(no error message)");
+                    return Err(Error::Llm(format!("codex returned error: {msg}")));
                 }
                 _ => {}
             }
