@@ -1,26 +1,26 @@
 class MerlionAgent < Formula
   desc "Self-improving AI coding agent — Rust port of hermes-agent"
   homepage "https://github.com/MerlionOS/merlion-agent"
-  version "0.1.11"
+  version "0.1.12"
   license "MIT"
 
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/MerlionOS/merlion-agent/releases/download/v#{version}/merlion-aarch64-apple-darwin.tar.gz"
-      sha256 "d0f6f200df5b8a7f1863e4d8d28bedc7dae0df228f900a83651b48c7d7ced6dc"
+      sha256 "1bac6f5ed4b9443b8f126bab4cb17eb019fcb45bf5adfc5678c88c88e92a573b"
     else
       url "https://github.com/MerlionOS/merlion-agent/releases/download/v#{version}/merlion-x86_64-apple-darwin.tar.gz"
-      sha256 "2093946ecd561f266589d2b9d2ad5e257ef15b46ec99b8dffb764c4e485a6a40"
+      sha256 "7c2f589288f83a7f44bf70fc4f6ad531e2439095348589f2832be5de18965d25"
     end
   end
 
   on_linux do
     if Hardware::CPU.arm?
       url "https://github.com/MerlionOS/merlion-agent/releases/download/v#{version}/merlion-aarch64-unknown-linux-gnu.tar.gz"
-      sha256 "0daf683b6fd2ce6c135b0d23fc85d720ea9289f54286f256493e268ee80906ab"
+      sha256 "950d48ba64f216fa58a83d46336e840ee16deafc8ee37a7ca08f001cb2fddcb1"
     else
       url "https://github.com/MerlionOS/merlion-agent/releases/download/v#{version}/merlion-x86_64-unknown-linux-gnu.tar.gz"
-      sha256 "ae0a35216e276c4f359d3ff93ca105ba888983476c051659ccdeddd409e681ce"
+      sha256 "09538de95a3db2c2ed6502d57c9a8f061dc93bbcac207d81cc9881f0562e327d"
     end
   end
 
