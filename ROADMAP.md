@@ -467,6 +467,27 @@ three bugs:
 
 ---
 
+## Phase 14.2 — Codex auth in setup wizard (v0.1.10, ≈0.2 session hours)
+
+After v0.1.9 shipped, the `merlion setup` wizard rendered the codex
+provider's credential status as red "missing" — it was calling
+`std::env::var("(codex login / ~/.codex/auth.json)")` (a sentinel
+string, not a real env var) and the lookup always failed even when
+the user *was* authenticated.
+
+| # | Item | Status |
+|---|---|---|
+| 14.2.1 | `is_codex` branch in `section_inference_provider` — check `~/.codex/auth.json` instead of an env var; render "Codex auth: ✓ /Users/.../auth.json" or "missing (run `codex login`)" | ✅ |
+| 14.2.2 | 3-way credential prompt becomes 2-way for codex (drop "Re-enter API key" since there's no env var to write) | ✅ |
+| 14.2.3 | Post-pick credential prompt: for codex, just print "Codex auth detected" or "Run `codex login`" instead of asking for a password to append to `.env` | ✅ |
+| 14.2.4 | `codex_auth_path()` / `codex_auth_exists()` helpers near `prompt_and_save_key` | ✅ |
+
+**Acceptance:** `merlion setup` with codex selected as provider shows
+the auth status as green ✓ when `codex login` has been run, and never
+prompts for a phantom API key.
+
+---
+
 ## Summary — remaining work to v1
 
 Adding up the unchecked items:

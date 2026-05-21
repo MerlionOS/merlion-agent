@@ -444,16 +444,21 @@ fn section_inference_provider(
         Some((p, m)) => (p.to_string(), m.to_string()),
         None => (String::new(), cfg.model.id.clone()),
     };
+    let is_codex = current_provider == "codex";
 
     let resolved_key_env = cfg
         .resolve_provider()
         .ok()
         .map(|p| p.api_key_env)
         .unwrap_or_else(|| "OPENAI_API_KEY".to_string());
-    let creds_ok = std::env::var(&resolved_key_env)
-        .ok()
-        .filter(|v| !v.is_empty())
-        .is_some();
+    let creds_ok = if is_codex {
+        codex_auth_exists()
+    } else {
+        std::env::var(&resolved_key_env)
+            .ok()
+            .filter(|v| !v.is_empty())
+            .is_some()
+    };
 
     let pretty_provider = catalog_entry(&current_provider)
         .map(|e| e.label.to_string())
@@ -465,20 +470,40 @@ fn section_inference_provider(
         style(&cfg.model.id).bold()
     );
     println!("  {} {}", style("Active provider: ").dim(), pretty_provider);
-    println!(
-        "  {} {} {}",
-        style(format!("{resolved_key_env}:")).dim(),
-        if creds_ok {
-            style("✓").green().bold().to_string()
-        } else {
-            style("missing").red().to_string()
-        },
-        if creds_ok {
-            style("(already set in env)").dim().to_string()
-        } else {
-            String::new()
-        }
-    );
+    if is_codex {
+        let path_display = codex_auth_path()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| "~/.codex/auth.json".into());
+        println!(
+            "  {} {} {}",
+            style("Codex auth:      ").dim(),
+            if creds_ok {
+                style("✓").green().bold().to_string()
+            } else {
+                style("missing").red().to_string()
+            },
+            if creds_ok {
+                style(format!("({path_display})")).dim().to_string()
+            } else {
+                style("(run `codex login`)").dim().to_string()
+            }
+        );
+    } else {
+        println!(
+            "  {} {} {}",
+            style(format!("{resolved_key_env}:")).dim(),
+            if creds_ok {
+                style("✓").green().bold().to_string()
+            } else {
+                style("missing").red().to_string()
+            },
+            if creds_ok {
+                style("(already set in env)").dim().to_string()
+            } else {
+                String::new()
+            }
+        );
+    }
     println!();
 
     // --quick: if the model id is configured and creds are present, skip.
@@ -492,13 +517,22 @@ fn section_inference_provider(
 
     let theme = ColorfulTheme::default();
 
-    // 3-way credential prompt when key is already set.
+    // 3-way credential prompt when key is already set. For codex, drop
+    // the "Re-enter API key" option (auth flows through `codex login`,
+    // not an env var) — present a 2-choice picker instead.
     if creds_ok && !cfg.model.id.is_empty() {
-        let choices = &[
-            "Use existing model + credentials (skip)",
-            "Change model / provider",
-            "Re-enter API key",
-        ];
+        let choices: &[&str] = if is_codex {
+            &[
+                "Use existing model + credentials (skip)",
+                "Change model / provider",
+            ]
+        } else {
+            &[
+                "Use existing model + credentials (skip)",
+                "Change model / provider",
+                "Re-enter API key",
+            ]
+        };
         let pick = Select::with_theme(&theme)
             .with_prompt("What would you like to do?")
             .items(choices)
@@ -583,7 +617,23 @@ fn section_inference_provider(
         max_tokens: cfg.model.max_tokens,
     };
 
-    // API key for the (possibly new) provider.
+    // Credentials for the (possibly new) provider.
+    if entry.prefix == "codex" {
+        if codex_auth_exists() {
+            println!(
+                "  {} {}",
+                style("✓").green().bold(),
+                style("Codex auth detected at ~/.codex/auth.json.").dim()
+            );
+        } else {
+            println!(
+                "  {} {}",
+                style("·").dim(),
+                style("Run `codex login` before using merlion with the codex provider.").dim()
+            );
+        }
+        return Ok(true);
+    }
     let new_key_env = cfg.resolve_provider()?.api_key_env;
     if std::env::var(&new_key_env)
         .ok()
@@ -805,6 +855,19 @@ fn section_agent(cfg: &mut Config, quick: bool) -> Result<bool> {
 }
 
 /// Prompt for an API key (hidden) and append it to `.env` if entered.
+/// Path to `~/.codex/auth.json`. Returns None when no home directory.
+fn codex_auth_path() -> Option<std::path::PathBuf> {
+    dirs::home_dir().map(|h| h.join(".codex/auth.json"))
+}
+
+/// Codex stores its OAuth token at `~/.codex/auth.json` after a successful
+/// `codex login`. The setup wizard uses the file's existence as a proxy
+/// for "credentials present" — codex itself will validate the token on
+/// the first `codex exec` call.
+fn codex_auth_exists() -> bool {
+    codex_auth_path().map(|p| p.exists()).unwrap_or(false)
+}
+
 fn prompt_and_save_key(env_path: &std::path::Path, key_env: &str) -> Result<()> {
     let theme = ColorfulTheme::default();
     let prompt = format!("{key_env} (press Enter to skip and add it manually later)");
