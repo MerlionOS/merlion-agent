@@ -329,15 +329,20 @@ pub async fn run(section: Section, quick: bool) -> Result<()> {
 // ─── Visual helpers ────────────────────────────────────────────────────
 
 fn print_banner() {
+    // Strict cell math: ┌ + N─ + ┐ on the top, │ + pad + title + pad + │
+    // on the middle, where N = pad*2 + title.chars().count(). Avoids any
+    // glyph whose width depends on the user's terminal font.
     let title = "Merlion Agent Setup Wizard";
-    let inner_width = title.chars().count() + 6;
+    let title_width = title.chars().count();
+    let pad: usize = 2;
+    let inner_width = title_width + pad * 2;
     let horizontal: String = "─".repeat(inner_width);
+    let spaces: String = " ".repeat(pad);
     println!();
     println!("  {}", style(format!("┌{horizontal}┐")).magenta());
     println!(
-        "  {} {}   {}   {}",
+        "  {}{spaces}{}{spaces}{}",
         style("│").magenta(),
-        style("⚕").magenta(),
         style(title).bold().magenta(),
         style("│").magenta(),
     );
