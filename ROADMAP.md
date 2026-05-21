@@ -450,6 +450,23 @@ models listed.
 
 ---
 
+## Phase 14.1 — Codex fixes (v0.1.9, ≈0.3 session hours)
+
+After v0.1.8 shipped, live smoke-test against `codex` 0.130.0 surfaced
+three bugs:
+
+| # | Bug | Fix | Status |
+|---|---|---|---|
+| 14.1.1 | Event schema was wrong — I'd modeled it from the desktop-app session files (`session_meta` / `event_msg.payload.type=="agent_message"`) which the CLI doesn't emit | Parse the actual CLI schema: `thread.started` → `thread_id`; `item.completed` with `item.type=="agent_message"` → `item.text`; `turn.completed` → top-level `usage.input_tokens/output_tokens` | ✅ |
+| 14.1.2 | Catalog listed `gpt-5-codex` / `gpt-5` which return `400 invalid_request_error: The 'gpt-5-codex' model is not supported when using Codex with a ChatGPT account.` | Replace with ChatGPT-subscription-allowed lineup: gpt-5.5, gpt-5.4, gpt-5.4-mini, gpt-5.3-codex, gpt-5.3-codex-spark, gpt-5.2 (matches hermes) | ✅ |
+| 14.1.3 | Inherited stdin caused `Reading additional input from stdin...` informational line and could block | `cmd.stdin(Stdio::null())` explicitly | ✅ |
+| 14.1.4 | Also handle `turn.failed` / `error` events to surface codex-side failures as `Error::Llm("codex returned error: ...")` instead of swallowing them | ✅ |
+
+**Acceptance:** `merlion -z "what is 2+2" -m codex:gpt-5.5` returns
+`4` end-to-end (verified locally).
+
+---
+
 ## Summary — remaining work to v1
 
 Adding up the unchecked items:

@@ -76,9 +76,19 @@ pub const CATALOG: &[ProviderEntry] = &[
         // in an env var. The catalog entry's api_key_env field is kept
         // for documentation only.
         api_key_env: "(codex login / ~/.codex/auth.json)",
-        // Codex routes through `codex exec` which accepts arbitrary model
-        // ids; the listed values match Codex's published model lineup.
-        models: &["gpt-5-codex", "gpt-5", "gpt-5-mini", "o3", "o3-mini"],
+        // Models available to ChatGPT subscription accounts via the
+        // codex CLI. `gpt-5-codex` / `gpt-5` (no version suffix) are
+        // gated to API-billed accounts; the codex-only IDs are listed
+        // here. The "Enter custom model name…" escape hatch covers
+        // anything new.
+        models: &[
+            "gpt-5.5",
+            "gpt-5.4",
+            "gpt-5.4-mini",
+            "gpt-5.3-codex",
+            "gpt-5.3-codex-spark",
+            "gpt-5.2",
+        ],
     },
     ProviderEntry {
         prefix: "openai",
