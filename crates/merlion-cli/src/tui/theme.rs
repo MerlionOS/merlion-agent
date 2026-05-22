@@ -14,7 +14,15 @@ pub enum ThemeKind {
 
 impl ThemeKind {
     pub fn from_env() -> Self {
-        match std::env::var("MERLION_THEME").ok().as_deref() {
+        Self::parse(std::env::var("MERLION_THEME").ok().as_deref())
+    }
+
+    /// Pure parser — split out from `from_env` so tests can exercise the
+    /// matching logic without touching process-global env vars. Earlier
+    /// tests used `set_var` + `remove_var` and raced under `cargo test`'s
+    /// default parallel threading on macOS.
+    fn parse(value: Option<&str>) -> Self {
+        match value {
             Some("light") => ThemeKind::Light,
             _ => ThemeKind::Dark,
         }
@@ -104,15 +112,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn dark_is_default_when_env_unset() {
-        std::env::remove_var("MERLION_THEME");
-        assert_eq!(ThemeKind::from_env(), ThemeKind::Dark);
+    fn dark_is_default_when_value_unset() {
+        assert_eq!(ThemeKind::parse(None), ThemeKind::Dark);
     }
 
     #[test]
-    fn light_kicks_in_when_env_is_light() {
-        std::env::set_var("MERLION_THEME", "light");
-        assert_eq!(ThemeKind::from_env(), ThemeKind::Light);
-        std::env::remove_var("MERLION_THEME");
+    fn dark_is_default_for_unknown_value() {
+        assert_eq!(ThemeKind::parse(Some("solarized")), ThemeKind::Dark);
+        assert_eq!(ThemeKind::parse(Some("")), ThemeKind::Dark);
+    }
+
+    #[test]
+    fn light_kicks_in_when_value_is_light() {
+        assert_eq!(ThemeKind::parse(Some("light")), ThemeKind::Light);
     }
 }
