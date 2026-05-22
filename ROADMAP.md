@@ -498,18 +498,18 @@ quality-of-life gaps that don't need new infrastructure.
 ### Subcommands
 | # | Subcommand | Files | Status |
 |---|---|---|---|
-| 15.1 | `status` — explicit alias for `doctor` (hermes ships both names) | `merlion-cli/src/main.rs` | ⬜️ |
-| 15.2 | `uninstall` — stop gateway → optional backup → remove `~/.merlion/` → optional `cargo uninstall` of the binary | `merlion-cli/src/uninstall_cmd.rs` | ⬜️ |
-| 15.3 | `dump` — plain-text setup summary (version, config redacted, env-var presence matrix, sessions count, mcp count, gateway state, last N log lines) for copy-pasting into a bug report | `merlion-cli/src/dump_cmd.rs` | ⬜️ |
-| 15.4 | `debug share` — tar.gz bundle of redacted `config.yaml` + `.env`-with-values-stripped + last 1000 log lines for support upload | `merlion-cli/src/debug_cmd.rs` | ⬜️ |
-| 15.5 | `checkpoints {list,prune,vacuum}` — sessions.db management: list rows by age/size, prune by age, run SQLite VACUUM | `merlion-cli/src/checkpoints_cmd.rs` | ⬜️ |
-| 15.6 | `hooks {list,test}` — load `hooks` section from `~/.merlion/config.yaml`, list configured lifecycle hooks, dry-run a hook against synthetic input | `merlion-cli/src/hooks_cmd.rs` | ⬜️ |
+| 15.1 | `status` — explicit alias for `doctor` (hermes ships both names) | `merlion-cli/src/main.rs` | ✅ |
+| 15.2 | `uninstall` — stop gateway → optional backup → remove `~/.merlion/` → optional `cargo uninstall` of the binary | `merlion-cli/src/uninstall_cmd.rs` | ✅ |
+| 15.3 | `dump` — plain-text setup summary (version, config redacted, env-var presence matrix, sessions count, mcp count, gateway state, last N log lines) for copy-pasting into a bug report | `merlion-cli/src/dump_cmd.rs` | ✅ |
+| 15.4 | `debug share` — tar.gz bundle of redacted `config.yaml` + `.env`-with-values-stripped + last 1000 log lines for support upload | `merlion-cli/src/debug_cmd.rs` | ✅ |
+| 15.5 | `checkpoints {list,prune,vacuum}` — sessions.db management: list rows by age/size, prune by age, run SQLite VACUUM | `merlion-cli/src/checkpoints_cmd.rs` | ✅ |
+| 15.6 | `hooks {list,test}` — load `hooks` section from `~/.merlion/config.yaml`, list configured lifecycle hooks, dry-run a hook against synthetic input | `merlion-cli/src/hooks_cmd.rs` | ✅ |
 
 ### Plumbing
 | # | Item | Status |
 |---|---|---|
-| 15.7 | Parallel-subagent pattern: each command above is built by a dedicated agent that writes its own module + WIRING SPEC comment; main thread serializes the `mod ...;` + `Command::...` + dispatch arm wiring | ⬜️ |
-| 15.8 | Full release lap: PR, CI, tag v0.1.13, GitHub release, Homebrew tap bump, crates.io publish, in-repo formula PR | ⬜️ |
+| 15.7 | Parallel-subagent pattern: each command above is built by a dedicated agent that writes its own module + WIRING SPEC comment; main thread serializes the `mod ...;` + `Command::...` + dispatch arm wiring | ✅ |
+| 15.8 | Full release lap: PR, CI, tag v0.1.13, GitHub release, Homebrew tap bump, crates.io publish, in-repo formula PR | ✅ |
 
 **Deliberately deferred:**
 - Batch B (lsp, webhook, whatsapp, pairing, insights) — ~2-3h each
@@ -519,6 +519,26 @@ quality-of-life gaps that don't need new infrastructure.
 **Acceptance:** `merlion --help` lists 27 subcommands (was 21); each of
 the 6 new commands has a `--help` description and at least one happy
 path that succeeds in a real terminal.
+
+---
+
+## Phase 15.1 — flaky theme test fix (v0.1.14, ≈0.1 session hours)
+
+During the Phase 15 release lap, PR #23's macOS CI run surfaced a
+pre-existing race in `tui::theme::tests`: two tests mutated the
+process-global `MERLION_THEME` env var from parallel threads, so one's
+`set_var("light")` could leak into the other's "default" assertion.
+Ubuntu happened to schedule them in the safe order; macOS didn't.
+
+| # | Item | Status |
+|---|---|---|
+| 15.1.1 | Extract a pure `ThemeKind::parse(Option<&str>)`; tests pass `None` / `Some("light")` instead of touching env | ✅ |
+| 15.1.2 | Add `unknown_value_falls_back_to_dark` test (empty string + nonsense string) for free | ✅ |
+| 15.1.3 | v0.1.14 release lap (PR + tag + Homebrew + crates.io) | ✅ |
+
+**Acceptance:** macOS CI on PR #25 (the Homebrew bump for v0.1.14)
+showed both `Test (macos-latest)` and `Test (ubuntu-latest)` green;
+race is structurally impossible going forward.
 
 ---
 
