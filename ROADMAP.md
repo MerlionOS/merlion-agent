@@ -410,6 +410,23 @@ instead of "IO error: not a terminal".
 
 ---
 
+## Phase 13.1 — Setup banner alignment (v0.1.11, ≈0.1 session hours)
+
+The Phase 13 welcome banner rendered with a stray `│` past the right
+border on some terminals: the middle row was 2 cells wider than the
+horizontal borders, and the leading `⚕` glyph (U+2695) rendered as 2
+cells wide under font fallbacks that picked a CJK font ahead of the
+system monospace.
+
+| # | Item | Status |
+|---|---|---|
+| 13.1.1 | Drop the `⚕` glyph; use strict cell math (`inner_width = pad*2 + title.chars().count()`); top `┌` + N`─` + `┐` matches middle `│` + pad + title + pad + `│` | ✅ |
+
+**Acceptance:** banner is a symmetric N-cell-wide magenta box; right
+`│` aligns with `┐` / `┘` regardless of font fallback.
+
+---
+
 ## Phase 14 — OpenAI Codex shell-out (v0.1.8, ≈1.5 session hours)
 
 User asked whether merlion could use a ChatGPT subscription instead of
@@ -488,6 +505,27 @@ prompts for a phantom API key.
 
 ---
 
+## Phase 14.3 — Codex auth in `merlion model` (v0.1.12, ≈0.2 session hours)
+
+Phase 14.2 special-cased codex in `merlion setup`. The parallel path
+in `merlion model` was missed — both `merlion model` (no-arg wizard)
+and `merlion model codex:gpt-5.5` (shortcut) still ran the generic
+API-key prompt and printed `Add \`(codex login / ~/.codex/auth.json)=...\``
+which a user reasonably tried to type as a shell command (and got
+`error: unrecognized subcommand '/'`).
+
+| # | Item | Status |
+|---|---|---|
+| 14.3.1 | `set_shortcut` skips the API-key prompt for codex provider | ✅ |
+| 14.3.2 | `wizard` post-pick credential step does the same | ✅ |
+| 14.3.3 | New helper `report_codex_auth_status()` prints "Codex auth detected" or "Run `codex login`" with a clear standalone-command hint | ✅ |
+
+**Acceptance:** `merlion model codex:gpt-5.5` writes the config and
+either reports auth detected or prints the literal command `codex login`
+(no sentinel-string shell-command hint).
+
+---
+
 ## Phase 15 — Gap-fill Batch A (v0.1.13, ≈3 session hours)
 
 `hermes --help` has 42 subcommands; merlion has 21. Most of the diff is
@@ -542,28 +580,42 @@ race is structurally impossible going forward.
 
 ---
 
-## Summary — remaining work to v1
+## Summary — what's shipped
 
-Adding up the unchecked items:
+The originally-estimated ~73 hours of pre-v0.1.0 roadmap (Phases 0–8)
+is **complete**. Bedrock + Vertex landed via hand-rolled SigV4 and
+gcloud shellout respectively — no heavyweight AWS/GCP SDKs needed.
 
-| Phase | Remaining | Cumulative |
-|---|---:|---:|
-| 1 (Provider breadth — Bedrock/Vertex/usage display) | 5 h  | 5 h  |
-| 2 (Tool surface — web_search ✅, task tool, allowlist disk, truncation ✅) | 3 h  | 8 h  |
-| 3 (Memory & skills — tab-complete, agentskills.io doc) | 1 h  | 9 h  |
-| 4 (MCP integration — HTTP transport, OAuth) | 3 h  | 12 h |
-| 5 (Gateway — Discord, Slack, voice, cross-platform session continuity) | 9 h  | 21 h |
-| 6 (Sandboxes — Docker, SSH; cron→messaging delivery) | 5 h  | 26 h |
-| 7 (TUI — themes, tab-complete) | 2 h  | 28 h |
-| 8 (Packaging — release artifacts, Homebrew, self-update) | 4 h  | 32 h |
+Post-v0.1.0 work shipped as 15 patch releases focused on hermes
+parity, polish, and quality-of-life fixes:
 
-**Status update:** the originally-estimated ≈73h of roadmap work is now
-**substantially complete**. The remaining roadmap items are minor polish
-(Modal/Daytona/Singularity sandboxes — explicitly out of scope; release
-artifacts are already wired and just need a real `v*` tag push to publish).
+| Phase | Version | What |
+|---|---|---|
+| 9    | v0.1.1  | Daily-use polish |
+| 10   | v0.1.2  | Parity-on-the-useful-subset (5 flags + 3 subcommands) |
+| 11   | v0.1.3  | Gateway service lifecycle (install/start/stop/logs) |
+| 12   | v0.1.4  | Catalog-driven `merlion model` picker |
+| 12.1 | v0.1.5  | Model picker non-TTY fallback |
+| 12.2 | v0.1.6  | Catalog refresh (gpt-5 family) |
+| 13   | v0.1.7  | `merlion setup` parity polish (sectional wizard) |
+| 13.1 | v0.1.11 | Setup banner alignment |
+| 14   | v0.1.8  | OpenAI Codex shell-out (ChatGPT subscription) |
+| 14.1 | v0.1.9  | Codex event-schema parsing + correct model list |
+| 14.2 | v0.1.10 | Codex auth check in setup wizard |
+| 14.3 | v0.1.12 | Codex auth check in `merlion model` |
+| 15   | v0.1.13 | Gap-fill Batch A (5 new subcommands: dump, debug, checkpoints, hooks, uninstall) |
+| 15.1 | v0.1.14 | Flaky theme test fix |
 
-Recent runs added Bedrock + Vertex via hand-rolled SigV4 and gcloud
-shellout respectively — no heavyweight AWS/GCP SDKs needed.
+**Distribution:** every patch ships across **GitHub release artifacts**
+(4 prebuilt targets), **crates.io** (11 workspace crates), and the
+**Homebrew tap** (`brew install MerlionOS/merlion/merlion-agent`).
+
+**Future work (parked):**
+- **Batch B** — lsp, webhook, whatsapp, pairing, insights (~2–3h each)
+- **Batch C** — dashboard (web UI), kanban, profile, acp, plugins,
+  external memory providers (~4h+ each)
+
+See ⛔️ Explicitly out of scope below for items deliberately deferred.
 
 ---
 
