@@ -1010,6 +1010,7 @@ mod tests {
                 },
                 system_prompt: None,
                 max_iterations: 32,
+                hooks: Default::default(),
             };
             let resolved = cfg
                 .resolve_provider()

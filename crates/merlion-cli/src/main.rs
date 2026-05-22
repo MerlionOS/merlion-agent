@@ -24,16 +24,21 @@ use tokio::sync::mpsc;
 mod approver;
 mod auth_cmd;
 mod backup_cmd;
+mod checkpoints_cmd;
 mod completion;
 mod curator_cmd;
+mod debug_cmd;
+mod dump_cmd;
 mod fallback_cmd;
 mod gateway_service;
+mod hooks_cmd;
 mod logs;
 mod model_cmd;
 mod setup;
 mod skills_cmd;
 mod tools_cmd;
 mod tui;
+mod uninstall_cmd;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -216,6 +221,42 @@ enum Command {
     Backup(backup_cmd::BackupArgs),
     /// Restore a tar.gz previously produced by `merlion backup`.
     Import(backup_cmd::ImportArgs),
+    /// Print a compact, copy-pasteable plain-text snapshot of the user's
+    /// merlion setup — config, env-var presence (no values), credential
+    /// file presence, store sizes, MCP servers, gateway service state,
+    /// cron jobs, and recent log tails. Designed to be dropped into a
+    /// bug report. API keys, tokens, and password-shaped values are
+    /// NEVER written to stdout.
+    Dump,
+    /// Diagnostics for support requests. `merlion debug share` packages a
+    /// redacted snapshot of `~/.merlion/` (config, env-var names only,
+    /// log tails) into a single tar.gz you can attach to a bug report.
+    /// Nothing is uploaded — the file lands on your disk and you choose
+    /// what to do with it.
+    Debug {
+        #[command(subcommand)]
+        action: debug_cmd::DebugAction,
+    },
+    /// Inspect and prune the sessions database at `~/.merlion/sessions.db`.
+    /// Subcommands: `stats`, `list`, `prune --older-than <DUR> [--dry-run]`,
+    /// `vacuum`. Prune deletes whole sessions whose last activity is
+    /// older than the given humantime duration (e.g. `30d`, `12h`, `1w`);
+    /// messages and FTS rows are cascaded.
+    Checkpoints {
+        #[command(subcommand)]
+        action: checkpoints_cmd::CheckpointsAction,
+    },
+    /// Inspect and dry-run shell-script lifecycle hooks declared under
+    /// `hooks:` in `~/.merlion/config.yaml`. Hooks are not yet executed
+    /// by the agent loop — that wiring is tracked separately.
+    Hooks {
+        #[command(subcommand)]
+        action: hooks_cmd::HooksAction,
+    },
+    /// Remove merlion from the system. Stops the gateway daemon, optionally
+    /// deletes `~/.merlion/`, and prints the right command for removing
+    /// the installed binary (`brew uninstall` or `cargo uninstall`).
+    Uninstall(uninstall_cmd::UninstallArgs),
 }
 
 /// Section selector for `merlion setup [SECTION]`.
@@ -451,6 +492,11 @@ async fn main() -> Result<()> {
         Command::Auth { action } => auth_cmd::run(action).await,
         Command::Backup(args) => backup_cmd::run_backup(args).await,
         Command::Import(args) => backup_cmd::run_import(args).await,
+        Command::Dump => dump_cmd::run(cfg).await,
+        Command::Debug { action } => debug_cmd::run(action).await,
+        Command::Checkpoints { action } => checkpoints_cmd::run(action).await,
+        Command::Hooks { action } => hooks_cmd::run(cfg, action).await,
+        Command::Uninstall(args) => uninstall_cmd::run(args).await,
     }
 }
 
@@ -482,6 +528,7 @@ fn wrap_with_fallback(primary: Arc<dyn LlmClient>, cfg: &Config) -> Arc<dyn LlmC
             },
             system_prompt: cfg.system_prompt.clone(),
             max_iterations: cfg.max_iterations,
+            hooks: cfg.hooks.clone(),
         };
         let provider = match entry_cfg.resolve_provider() {
             Ok(p) => p,
@@ -577,6 +624,7 @@ mod cli_override_tests {
             },
             system_prompt: None,
             max_iterations: 32,
+            hooks: Default::default(),
         }
     }
 

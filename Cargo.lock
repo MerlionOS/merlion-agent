@@ -1342,7 +1342,7 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
 name = "merlion-agent"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1367,6 +1367,7 @@ dependencies = [
  "merlion-tools",
  "ratatui",
  "reqwest",
+ "rusqlite",
  "rustyline",
  "serde",
  "serde_json",
@@ -1382,7 +1383,7 @@ dependencies = [
 
 [[package]]
 name = "merlion-config"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1396,7 +1397,7 @@ dependencies = [
 
 [[package]]
 name = "merlion-core"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1412,7 +1413,7 @@ dependencies = [
 
 [[package]]
 name = "merlion-cron"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1432,7 +1433,7 @@ dependencies = [
 
 [[package]]
 name = "merlion-gateway"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1456,7 +1457,7 @@ dependencies = [
 
 [[package]]
 name = "merlion-llm"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -1478,7 +1479,7 @@ dependencies = [
 
 [[package]]
 name = "merlion-mcp"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -1501,7 +1502,7 @@ dependencies = [
 
 [[package]]
 name = "merlion-memory"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1517,7 +1518,7 @@ dependencies = [
 
 [[package]]
 name = "merlion-session"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1533,7 +1534,7 @@ dependencies = [
 
 [[package]]
 name = "merlion-skills"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "anyhow",
  "dirs",
@@ -1547,7 +1548,7 @@ dependencies = [
 
 [[package]]
 name = "merlion-tools"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "anyhow",
  "async-trait",

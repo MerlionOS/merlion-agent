@@ -268,6 +268,7 @@ fn provider_api_key_env(provider: &str) -> Result<String> {
         },
         system_prompt: None,
         max_iterations: 32,
+        hooks: Default::default(),
     };
     let resolved = cfg.resolve_provider()?;
     Ok(resolved.api_key_env)

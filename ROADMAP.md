@@ -488,6 +488,40 @@ prompts for a phantom API key.
 
 ---
 
+## Phase 15 — Gap-fill Batch A (v0.1.13, ≈3 session hours)
+
+`hermes --help` has 42 subcommands; merlion has 21. Most of the diff is
+heavy lifts (dashboard, kanban, profile, acp) or Nous-specific (claw,
+slack-manifest, computer-use). This batch closes the easy
+quality-of-life gaps that don't need new infrastructure.
+
+### Subcommands
+| # | Subcommand | Files | Status |
+|---|---|---|---|
+| 15.1 | `status` — explicit alias for `doctor` (hermes ships both names) | `merlion-cli/src/main.rs` | ⬜️ |
+| 15.2 | `uninstall` — stop gateway → optional backup → remove `~/.merlion/` → optional `cargo uninstall` of the binary | `merlion-cli/src/uninstall_cmd.rs` | ⬜️ |
+| 15.3 | `dump` — plain-text setup summary (version, config redacted, env-var presence matrix, sessions count, mcp count, gateway state, last N log lines) for copy-pasting into a bug report | `merlion-cli/src/dump_cmd.rs` | ⬜️ |
+| 15.4 | `debug share` — tar.gz bundle of redacted `config.yaml` + `.env`-with-values-stripped + last 1000 log lines for support upload | `merlion-cli/src/debug_cmd.rs` | ⬜️ |
+| 15.5 | `checkpoints {list,prune,vacuum}` — sessions.db management: list rows by age/size, prune by age, run SQLite VACUUM | `merlion-cli/src/checkpoints_cmd.rs` | ⬜️ |
+| 15.6 | `hooks {list,test}` — load `hooks` section from `~/.merlion/config.yaml`, list configured lifecycle hooks, dry-run a hook against synthetic input | `merlion-cli/src/hooks_cmd.rs` | ⬜️ |
+
+### Plumbing
+| # | Item | Status |
+|---|---|---|
+| 15.7 | Parallel-subagent pattern: each command above is built by a dedicated agent that writes its own module + WIRING SPEC comment; main thread serializes the `mod ...;` + `Command::...` + dispatch arm wiring | ⬜️ |
+| 15.8 | Full release lap: PR, CI, tag v0.1.13, GitHub release, Homebrew tap bump, crates.io publish, in-repo formula PR | ⬜️ |
+
+**Deliberately deferred:**
+- Batch B (lsp, webhook, whatsapp, pairing, insights) — ~2-3h each
+- Batch C (dashboard, kanban, profile, acp, plugins, memory providers) — each a separate phase
+- `claw`, `computer-use`, `slack` manifest helpers, `login`/`logout` aliases — out of scope or already covered
+
+**Acceptance:** `merlion --help` lists 27 subcommands (was 21); each of
+the 6 new commands has a `--help` description and at least one happy
+path that succeeds in a real terminal.
+
+---
+
 ## Summary — remaining work to v1
 
 Adding up the unchecked items:

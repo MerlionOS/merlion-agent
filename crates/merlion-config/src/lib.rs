@@ -22,6 +22,23 @@ pub struct Config {
     pub system_prompt: Option<String>,
     #[serde(default = "default_max_iterations")]
     pub max_iterations: u32,
+    #[serde(default)]
+    pub hooks: Hooks,
+}
+
+/// Shell-script hooks invoked at agent lifecycle events. Each hook is
+/// a shell command run with the hook's payload piped to stdin.
+#[derive(Debug, Default, Clone, serde::Deserialize, serde::Serialize)]
+#[serde(default)]
+pub struct Hooks {
+    /// Run before any tool dispatch. stdin: JSON { "tool": "...", "args": {...} }.
+    pub before_tool: Vec<String>,
+    /// Run after a tool returns. stdin: JSON { "tool": "...", "result": "..." }.
+    pub after_tool: Vec<String>,
+    /// Run when a chat session starts. stdin: JSON { "session_id": "..." }.
+    pub session_start: Vec<String>,
+    /// Run on chat session end. stdin: JSON { "session_id": "...", "messages": N }.
+    pub session_end: Vec<String>,
 }
 
 fn default_max_iterations() -> u32 {
@@ -58,6 +75,7 @@ impl Default for Config {
             },
             system_prompt: None,
             max_iterations: default_max_iterations(),
+            hooks: Hooks::default(),
         }
     }
 }
